@@ -29,6 +29,7 @@
     "build:win": "npm --prefix desktop/windows run dist:win",
     "build:mac": "npm --prefix desktop/windows run dist:mac",
     "build:installers": "npm --prefix desktop/windows run dist",
+    "release": "node tools/publish-release.mjs",
     "build:model": "node tools/build-model.mjs",
     "preview": "node tools/preview-server.mjs",
     "test": "node test/integration.test.mjs"
