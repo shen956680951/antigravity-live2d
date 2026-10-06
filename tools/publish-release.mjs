@@ -20,7 +20,7 @@ const INSTALLERS_DIR = path.join(ROOT, 'dist', 'installers')
 
 const TAG = process.env.RELEASE_TAG || 'v1.0.0'
 const TITLE = process.env.RELEASE_TITLE || 'v1.0.0 - Antigravity 鲸鱼娘桌宠全新跨平台发布'
-const REPO = 'Andersen216/dsh-whale-girl-live2d'
+const REPO = 'shen956680951/antigravity-live2d'
 
 const RELEASE_NOTES = `## 🐋 Antigravity 鲸鱼娘桌宠 v1.0.0 跨平台正式发布
 

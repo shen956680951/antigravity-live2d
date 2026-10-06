@@ -56,12 +56,12 @@
       "role": "Live2D 模型制作（绑定/动作/表情）"
     }
   ],
-  "homepage": "https://github.com/Andersen216/dsh-whale-girl-live2d",
+  "homepage": "https://github.com/shen956680951/antigravity-live2d",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Andersen216/dsh-whale-girl-live2d.git"
+    "url": "git+https://github.com/shen956680951/antigravity-live2d.git"
   },
   "bugs": {
-    "url": "https://github.com/Andersen216/dsh-whale-girl-live2d/issues"
+    "url": "https://github.com/shen956680951/antigravity-live2d/issues"
   }
 }
