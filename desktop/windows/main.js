@@ -1,50 +1,28 @@
-// DS 鲸鱼娘桌宠 · Windows 桌面外壳
+// Antigravity 鲸鱼娘桌宠 · 桌面外壳 (Windows / 跨平台 Electron)
 // ————————————————————————————————————————————————————————————
-// 和 macOS 版同一个思路：**她本身还是那份插件**（模型、联动、菜单、钱包都在插件里），
-// 这个程序只是一个透明、无边框、永远置顶的窗口，加载插件提供的那一页。
-//
-// Windows 上比 macOS 容易的地方：Electron 自带跨平台，不用担心 App Nap、私有 API 那类坑。
-// 需要注意的只有三件：
-//   ① 点击穿透：setIgnoreMouseEvents(true, { forward: true }) + 我们自己定时问页面「鼠标下面是不是她」
-//   ② 本机通行证：插件的 /dsh-pet/* 要过信任栅栏，所以把 ~/.dsh 里那张通行证写成 cookie
-//   ③ 打字：Electron 窗口默认可聚焦，不用像 macOS 那样覆写 canBecomeKey
-//
-// 另外按主人要求做了「联动」：第一次打开时如果检测不到插件，会直接给一个
-// 「一键安装插件」按钮，替你跑 dsh plugin --profile web add github:...，
-// 所以 Windows 用户不需要自己开命令行。
+// 核心特性：
+// 1. 透明、无边框、置顶窗口，运行 Live2D 鲸鱼娘
+// 2. 自动启动内置 Antigravity Node.js 服务 (端口 5199)
+// 3. 智能点击穿透：压在鲸鱼娘或面板上交互，透明处鼠标事件直接穿透至桌面
+// 4. 全局视线追踪、贴边悬浮小球、系统托盘管理
+
 const { app, BrowserWindow, Tray, Menu, screen, shell, session, ipcMain, nativeImage } = require('electron')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { exec } = require('node:child_process')
 
-// 宿主地址在启动时「发现」出来，不再写死 —— 与 macOS 版保持一致：
-// 官方桌面版（Electron，端口由宿主决定，实测 19387）和手动起的 `dsh web`（3080）都要能连上。
 const CANDIDATE_BASES = [
-  'http://127.0.0.1:19387',
+  'http://127.0.0.1:5199',
   'http://127.0.0.1:3080',
-  'http://127.0.0.1:8080',
-  'http://127.0.0.1:3000',
+  'http://127.0.0.1:19387'
 ]
 let petBase = CANDIDATE_BASES[0]
+let embeddedServer = null
 
-/** 通行证文件里记录的宿主端口（插件写的，因机器而异 —— 不能写死） */
-function deskPort() {
-  try {
-    const j = JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8'))
-    const n = Number(j.port)
-    return Number.isInteger(n) && n > 0 && n < 65536 ? n : null
-  } catch (e) {
-    return null
-  }
-}
-const petURL = () => petBase + '/dsh-pet/standalone'
-const PLUGIN = 'github:Andersen216/dsh-whale-girl-live2d'
-// 同 macOS：窗口要装得下她 + 四周的面板（透明区域点击穿透，不挡别的窗口）
+const petURL = () => petBase + '/standalone'
 const WIN_W = 560
-const WIN_H = 900   // 只加高：给她头顶留出聊天框的位置
+const WIN_H = 900
 const BALL = 62
-const TOKEN_FILE = path.join(os.homedir(), '.dsh', 'dsh-live2d-pet-desktop.json')
 
 let win = null
 let ballWin = null
@@ -54,8 +32,6 @@ let cursorFeed = null
 let lastCursor = null
 let dragTimer = null
 let dragFrom = null
-// 贴边小球单独一份拖动状态：原来和主窗口共用 dragFrom，收起状态下按小球会把
-// 已经 hide() 的主窗口一路搬走（B站/PR 反馈的真实 bug）
 let ballDrag = null
 let collapsed = false
 let lowPower = false
@@ -64,32 +40,37 @@ let failCount = 0
 let lastHit = 'none'
 
 // ——————————————————————————————————————————————————————————————
-// 通行证：插件启动时会写 ~/.dsh/dsh-live2d-pet-desktop.json
+// 启动 / 检测内置服务端
 // ——————————————————————————————————————————————————————————————
-function readToken() {
+async function startEmbeddedServer() {
   try {
-    const j = JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8'))
-    return typeof j.token === 'string' && j.token.length >= 16 ? j.token : null
+    const res = await fetch('http://127.0.0.1:5199/api/status', { signal: AbortSignal.timeout(1000) })
+    if (res.ok) {
+      console.log('[Desktop] 检测到已在运行的 Antigravity 服务 (5199)')
+      return true
+    }
   } catch (e) {
-    return null
+    // 尚未运行，正常启动内置服务
   }
-}
 
-async function setTokenCookie() {
-  const token = readToken()
-  if (!token) return false
+  const serverPath = fs.existsSync(path.join(__dirname, 'lib', 'server.js'))
+    ? path.join(__dirname, 'lib', 'server.js')
+    : path.resolve(__dirname, '../../lib/server.js')
+
+  if (!fs.existsSync(serverPath)) {
+    console.warn('[Desktop] 未找到内置 server.js 路径:', serverPath)
+    return false
+  }
+
+  console.log('[Desktop] 启动内置 Antigravity 桌宠服务:', serverPath)
   try {
-    await session.defaultSession.cookies.set({
-      url: petBase,
-      name: 'dsh_pet_desk',
-      value: token,
-      domain: '127.0.0.1',
-      path: '/',
-      secure: false,
-      httpOnly: false,
-    })
+    const url = require('node:url').pathToFileURL(serverPath).href
+    const mod = await import(url)
+    embeddedServer = mod.server
+    console.log('[Desktop] 内置服务启动就绪！')
     return true
-  } catch (e) {
+  } catch (err) {
+    console.error('[Desktop] 启动内置服务异常:', err)
     return false
   }
 }
@@ -99,7 +80,7 @@ async function setTokenCookie() {
 // ——————————————————————————————————————————————————————————————
 const hitJS = (x, y) => `(function(){try{
   var el=document.elementFromPoint(${x},${y});
-  var ui=!!(el&&el.closest&&el.closest('.dshp-panel,.dshp-menu,.dshp-hud,.dshp-bubble,.dshp-composer,.dshp-dock,.dshp-tab'));
+  var ui=!!(el&&el.closest&&el.closest('.dshp-panel,.dshp-menu,.dshp-hud,.dshp-bubble,.dshp-composer,.dshp-dock,.dshp-tab,.dshp-wrap'));
   if(ui) return 'panel';
   if(window.DSHPet&&DSHPet.hitTest&&DSHPet.hitTest(${x},${y})) return 'model';
   return 'none';
@@ -119,7 +100,7 @@ async function poll() {
     setIgnore(true)
     return
   }
-  if (dragTimer) return // 拖动中不抢事件（否则鼠标一离开她就变穿透，拖动会断）
+  if (dragTimer) return
   try {
     const kind = await win.webContents.executeJavaScript(hitJS(Math.round(p.x - b.x), Math.round(p.y - b.y)))
     lastHit = kind
@@ -143,12 +124,12 @@ function createMain() {
     hasShadow: false,
     skipTaskbar: true,
     show: false,
-    title: 'DS 鲸鱼娘桌宠',
+    title: 'Antigravity 鲸鱼娘桌宠',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
-      backgroundThrottling: false, // 她不能被后台降频（不然会像卡住）
-    },
+      backgroundThrottling: false
+    }
   })
   win.setAlwaysOnTop(true, 'screen-saver')
   win.setIgnoreMouseEvents(true, { forward: true })
@@ -156,25 +137,26 @@ function createMain() {
 
   const wa = screen.getPrimaryDisplay().workArea
   const saved = readPos()
-  win.setPosition(saved ? saved[0] : wa.x + wa.width - WIN_W - 8, saved ? saved[1] : wa.y + wa.height - WIN_H - 8)
+  win.setPosition(saved ? saved[0] : wa.x + wa.width - WIN_W - 16, saved ? saved[1] : wa.y + wa.height - WIN_H - 16)
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
     return { action: 'deny' }
   })
+
   win.webContents.on('did-finish-load', () => {
     failCount = 0
     win.webContents.executeJavaScript('window.DSHPet && DSHPet.setLowPower && DSHPet.setLowPower(' + lowPower + ')').catch(() => {})
     setTimeout(() => win.webContents.executeJavaScript('window.DSHPet && DSHPet.setHidden && DSHPet.setHidden(false)').catch(() => {}), 1200)
     setTimeout(() => win.webContents.executeJavaScript('window.DSHPet && DSHPet.setHidden && DSHPet.setHidden(false)').catch(() => {}), 3000)
   })
+
   win.webContents.on('did-fail-load', () => {
     failCount++
     if (failCount >= 3) showHint()
-    setTimeout(load, 5000)
+    setTimeout(load, 4000)
   })
-  // 窗口移动：越界就拉回来（拔掉外接屏 / 改分辨率后可能跑到屏幕外），
-  // 写盘节流到 400ms —— 原来每个 moved 事件都写一次，拖动时非常费（PR 反馈）
+
   win.on('moved', () => {
     if (!win || win.isDestroyed()) return
     const [x, y] = win.getPosition()
@@ -186,22 +168,18 @@ function createMain() {
       savePos()
     }
   })
+
   win.on('closed', () => { win = null })
 
-  // 拖动：页面里按下她 → 交给主进程搬窗口（拖动期间用 16ms 快速轮询，跟手）
+  // 拖动处理
   ipcMain.on('drag-start', async (_e, at) => {
-    // 小球用的是同一个 preload，也会发 drag-start；主窗口只是 hide() 没 destroy()，
-    // 不加这条守卫就会把看不见的主窗口搬走（PR 反馈）
     if (!win || win.isDestroyed() || !win.isVisible()) return
-    // ⚠️ 不能直接用 overPanel（那是 90ms 轮询的上一次结果）：
-    // 按下那一刻它恰好是 panel 时，这次拖动就被让给网页，只能在窗口内挪、整个窗口搬不动。
-    // B 站 @F0rsEn 反馈的正是这条。改成「按下瞬间重新判一次」，几十毫秒的等待对拖动没影响。
     try {
       const b = win.getBounds()
       const kind = await win.webContents.executeJavaScript(
-        hitJS(Math.round(at.x - b.x), Math.round(at.y - b.y)),
+        hitJS(Math.round(at.x - b.x), Math.round(at.y - b.y))
       )
-      if (kind === 'panel') return // 真控件（滑块/按钮/输入框）→ 让给网页
+      if (kind === 'panel') return
     } catch (e) {}
     dragFrom = { mouse: at, win: win.getPosition() }
     clearInterval(dragTimer)
@@ -212,17 +190,14 @@ function createMain() {
     }, 16)
     win.webContents.executeJavaScript("document.dispatchEvent(new PointerEvent('pointercancel',{bubbles:true}))").catch(() => {})
   })
+
   ipcMain.on('drag-end', () => {
     clearInterval(dragTimer)
     dragTimer = null
     dragFrom = null
     savePos()
   })
-  // 前端那个 ↗ 符号：用默认浏览器打开 DSH 界面
-  ipcMain.on('install-plugin', () => installPlugin())
-  // 前端（pet.js）发来的指令，和 macOS 版一一对应。
-  // ⚠️ 每条都带状态守卫：macOS 版在这里踩过无限递归的坑（expand 后又收到 shown 再 expand，
-  //    日志炸到 5472 万行、CPU 打满），Windows 版一开始就不留这个隐患。
+
   ipcMain.on('shell-msg', (_e, msg) => {
     switch (msg) {
       case 'hidden':
@@ -243,114 +218,39 @@ function createMain() {
   })
 
   load()
-  // ——— 全屏视线追踪 ———
-  // 页面只能看到窗口内的鼠标；窗口外的移动它收不到 → 她"不看你鼠标"。
-  // 用 Electron 原生 sendInputEvent 把全局光标位置喂进去（比 executeJavaScript 省得多）。
+
+  // 全屏视线追踪 (60Hz)
   cursorFeed = setInterval(() => {
     try {
       if (!win || win.isDestroyed() || !win.isVisible() || dragTimer) return
       const p = screen.getCursorScreenPoint()
-      // 与 macOS 同理：原来 60ms + 3px 死区会让视线目标「跳着给」，看着卡
       if (lastCursor && Math.abs(lastCursor.x - p.x) < 1 && Math.abs(lastCursor.y - p.y) < 1) return
       lastCursor = p
       const b = win.getBounds()
-      // 把「整个屏幕」映射到窗口坐标里（与 macOS 同理）：
-      // 否则鼠标跑到窗口外就会被夹住，看着像「到屏幕边缘就不跟了」。
       const disp = screen.getDisplayNearestPoint(p).bounds
       const nx = (p.x - disp.x) / Math.max(1, disp.width)
       const ny = (p.y - disp.y) / Math.max(1, disp.height)
       win.webContents.sendInputEvent({
         type: 'mouseMove',
         x: Math.round(nx * b.width),
-        y: Math.round(ny * b.height),
+        y: Math.round(ny * b.height)
       })
     } catch (e) {}
   }, 16)
+
   pollTimer = setInterval(poll, 90)
+
   win.once('ready-to-show', () => {
     win.showInactive()
     win.setAlwaysOnTop(true, 'screen-saver')
   })
 }
 
-/**
- * 发现正在运行的 DSH 宿主：官方桌面版（19387）或 `dsh web`（3080）。
- * 带通行证探 /dsh-pet/pet.js：200 = 就是它；401 = 插件在但票不对（也先进去）。
- * 以前写死 3080，导致只开官方桌面版的用户连不上。
- */
-async function discoverHost(token) {
-  let fallback = null
-  // 优先顺序：① 插件写下的真实端口 ② 本机实际在监听的端口（扫出来的） ③ 常见端口兜底
-  const scanned = await scanListeningPorts()
-  const ordered = []
-  const p = deskPort()
-  if (p) ordered.push(p)
-  for (const n of scanned) if (!ordered.includes(n)) ordered.push(n)
-  for (const base of CANDIDATE_BASES) {
-    const n = Number(base.split(':').pop())
-    if (!ordered.includes(n)) ordered.push(n)
-  }
-  const bases = ordered.map((n) => 'http://127.0.0.1:' + n)
-  for (const base of bases) {
-    try {
-      const ctl = new AbortController()
-      const timer = setTimeout(() => ctl.abort(), 1500)
-      const res = await fetch(base + '/dsh-pet/pet.js', {
-        headers: { Cookie: 'dsh_pet_desk=' + token },
-        signal: ctl.signal,
-      })
-      clearTimeout(timer)
-      if (res.status === 200) return base
-      if (res.status === 401 && !fallback) fallback = base
-    } catch (e) {
-      /* 这个宿主没在跑，试下一个 */
-    }
-  }
-  return fallback
-}
-
 async function load() {
   if (!win || win.isDestroyed()) return
-  const ok = await setTokenCookie()
-  if (!ok) return showHint()
-  const token = readToken()
-  const base = token ? await discoverHost(token) : null
-  if (!base) {
-    // 两个宿主都没找到：给提示页，5 秒后自动重试（用户开起任一个宿主就会连上）
-    failCount++
-    if (failCount >= 1) showHint()
-    setTimeout(load, 5000)
-    return
-  }
-  if (base !== petBase) console.log('[dsh-pet] 找到宿主:', base)
-  petBase = base
+  await startEmbeddedServer()
+  petBase = 'http://127.0.0.1:5199'
   win.loadURL(petURL())
-}
-
-/** 用 netstat 列出本机正在监听的端口（不靠固定端口去猜 —— 别人的端口可能完全不同） */
-function scanListeningPorts() {
-  return new Promise((resolve) => {
-    try {
-      exec('netstat -ano -p tcp', { timeout: 5000, windowsHide: true }, (err, stdout) => {
-        if (err || !stdout) return resolve([])
-        const ports = []
-        for (const line of String(stdout).split('\n')) {
-          if (!/LISTENING/i.test(line)) continue
-          const m = line.match(/(?:127\.0\.0\.1|0\.0\.0\.0|\[::1?\]|\[::\]):(\d{2,5})/)
-          if (m) {
-            const n = Number(m[1])
-            if (n > 1023 && n < 65536) ports.push(n)
-          }
-        }
-        // 去重 + 常见开发端口排前面（纯优化顺序，不影响正确性）
-        const uniq = [...new Set(ports)]
-        uniq.sort((a, b) => (a === 19387 || a === 3080 ? -1 : 0) - (b === 19387 || b === 3080 ? -1 : 0))
-        resolve(uniq.slice(0, 60))
-      })
-    } catch (e) {
-      resolve([])
-    }
-  })
 }
 
 function readPos() {
@@ -361,15 +261,14 @@ function readPos() {
   return null
 }
 
-/** 把窗口夹进「所有显示器工作区的并集」，越界就返回修正后的坐标 */
 function clampToDisplays(x, y) {
   try {
     const areas = screen.getAllDisplays().map((d) => d.workArea)
-    const w = 200, h = 120 // 只保证还有一块可见区域，允许半出屏（窗子本身很大）
+    const w = 200, h = 120
     const inside = areas.some((a) => x + w > a.x && x < a.x + a.width && y + h > a.y && y < a.y + a.height)
     if (inside) return [x, y]
     const p = screen.getPrimaryDisplay().workArea
-    return [p.x + p.width - 560, p.y + p.height - 300]
+    return [p.x + p.width - WIN_W, p.y + p.height - 300]
   } catch (e) {
     return [x, y]
   }
@@ -385,84 +284,43 @@ function savePos() {
   } catch (e) {}
 }
 
-/** DSH 没起来 / 插件没装时给一张能看懂、能求助的页面 */
-function showHint(installed) {
+function showHint() {
   if (!win || win.isDestroyed()) return
-  const token = readToken()
   const html = `<!doctype html><meta charset="utf-8"><style>
   html,body{margin:0;height:100%;background:transparent}
   body{display:flex;align-items:center;justify-content:center;font:13px/1.7 "Microsoft YaHei",-apple-system,sans-serif;color:#fff;text-align:center}
-  .box{background:rgba(18,22,34,.9);border:1px solid rgba(255,255,255,.18);border-radius:14px;padding:18px 22px;max-width:80%}
-  .t{font-weight:600;margin-bottom:8px;font-size:15px}
-  .s{opacity:.75;font-size:12px;margin-bottom:12px}
-  button{font:inherit;padding:8px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.25);
-    background:rgba(59,98,246,.9);color:#fff;cursor:pointer;margin:0 4px}
-  code{background:rgba(127,150,255,.18);padding:2px 6px;border-radius:6px}
+  .box{background:rgba(18,22,34,.92);border:1px solid rgba(255,255,255,.2);border-radius:14px;padding:20px 24px;max-width:85%}
+  .t{font-weight:600;margin-bottom:8px;font-size:16px}
+  .s{opacity:.8;font-size:13px;margin-bottom:14px}
+  button{font:inherit;padding:8px 16px;border-radius:10px;border:1px solid rgba(255,255,255,.25);
+    background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;cursor:pointer;margin:0 4px}
+  code{background:rgba(127,150,255,.2);padding:2px 6px;border-radius:6px}
   </style><body><div class="box">
-  <div class="t">🐋 正在找 DSH…</div>
-  <div class="s">${token ? '通行证已就位，但连不上 <code>${petBase}</code>。<br>请确认 ① 装了插件 ② DSH 正在运行。' : '还没读到通行证 <code>~/.dsh/dsh-live2d-pet-desktop.json</code>。<br>请先在 DSH 里装插件，然后重启 DSH。'}</div>
-  <button onclick="window.dshpet.install()">一键安装插件</button>
-  <button onclick="window.dshpet.reload()">重新连接</button>
+  <div class="t">🐋 正在连接 Antigravity 桌宠服务…</div>
+  <div class="s">端口 <code>5199</code> 正在初始化中，请稍候。</div>
+  <button onclick="window.dshpet.reload()">立即重试连接</button>
   </div>
   <script>
     window.dshpet = {
-      install: () => window.dshpetBridge && window.dshpetBridge.install(),
-      reload: () => window.dshpetBridge && window.dshpetBridge.reload(),
+      reload: () => window.dshpetBridge && window.dshpetBridge.reload()
     }
   </script></body>`
   win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html))
-}
-
-/** 联动：替用户跑一遍插件安装命令（这就是「下载软件同时把插件装好」） */
-function installPlugin() {
-  const cmd = `dsh plugin --profile web add ${PLUGIN}`
-  if (!win || win.isDestroyed()) return
-  win.webContents
-    .executeJavaScript(
-      `document.querySelector('.s').innerHTML = '正在安装插件…<br><code>${cmd}</code>'`,
-    )
-    .catch(() => {})
-  exec(cmd, { timeout: 300000, windowsHide: true }, (err, stdout, stderr) => {
-    const tail = (err ? String(stderr || err.message) : String(stdout || '')).slice(-400)
-    const ok = !err
-    const msg = ok
-      ? '✅ 插件装好了。<br>现在**重启一次 DSH**，然后点「重新连接」。<br><code>' + cmd + '</code>'
-      : '❌ 没装成，可能要手动来一次：<br><code>' + cmd + '</code><br>错误：' + tail
-    win.webContents
-      .executeJavaScript(`document.querySelector('.s').innerHTML = ${JSON.stringify(msg)}`)
-      .catch(() => {})
-    if (ok) setTimeout(load, 4000)
-  })
 }
 
 // ——————————————————————————————————————————————————————————————
 // 贴边小球（收起态）
 // ——————————————————————————————————————————————————————————————
 function ballHTML() {
-  const icon = readWhaleSVG()
+  const icon = `<svg viewBox="0 0 24 24"><path fill="#fff" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5c-2.49 0-4.5-2.01-4.5-4.5S8.51 7.5 11 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5z"/></svg>`
   return `<!doctype html><meta charset="utf-8"><style>
   html,body{margin:0;height:100%;background:transparent;overflow:hidden;user-select:none;-webkit-app-region:no-drag}
   .ball{width:100%;height:100%;border-radius:50%;box-sizing:border-box;display:flex;align-items:center;justify-content:center;
     background:radial-gradient(120% 120% at 50% 0%, rgba(60,70,96,.98), rgba(16,20,32,.98));
     border:1.5px solid rgba(255,255,255,.34);box-shadow:0 6px 18px rgba(0,0,0,.38);cursor:pointer}
   .ball:hover{border-color:rgba(255,255,255,.6);transform:scale(1.06)}
-  svg{width:58%;height:58%}
-  svg path{fill:#fff}
+  svg{width:56%;height:56%}
   </style><body><div class="ball">${icon}</div></body>`
-}
-
-function readWhaleSVG() {
-  const cands = [
-    path.join(process.env.APPDATA || '', 'npm', 'node_modules', '@deepseek-ai', 'dsh', 'node_modules', '@deepseek-ai', 'dsh-web-frontend', 'dist', 'favicon.svg'),
-    '/usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-web-frontend/dist/favicon.svg',
-  ]
-  for (const p of cands) {
-    try {
-      const s = fs.readFileSync(p, 'utf8')
-      if (s.includes('<svg')) return s.replace(/<style>[\s\S]*?<\/style>/, '')
-    } catch (e) {}
-  }
-  return '<svg viewBox="0 0 24 24"><path d="M3 15c3 0 4-2 6-2s3 2 6 2 4-3 6-3v3c-2 0-3 3-6 3s-3-2-6-2-3 2-6 2z"/></svg>'
 }
 
 function createBall() {
@@ -476,14 +334,11 @@ function createBall() {
     skipTaskbar: true,
     show: false,
     alwaysOnTop: true,
-    // ⚠️ 小球也必须挂 preload：它是靠 window.dshpetBridge 把点击/拖动报回来的，
-    // 不挂就等于「小球点不动、拖不了」（写完先自查发现的）
-    webPreferences: { contextIsolation: true, preload: path.join(__dirname, 'preload.js') },
+    webPreferences: { contextIsolation: true, preload: path.join(__dirname, 'preload.js') }
   })
   ballWin.setAlwaysOnTop(true, 'screen-saver')
   ballWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(ballHTML()))
   ballWin.webContents.on('did-finish-load', () => {
-    // 点一下展开；拖一下挪位置（松手贴最近的一边）
     ballWin.webContents.executeJavaScript(`
       (function(){
         var d=false, moved=0, sx=0, sy=0;
@@ -546,14 +401,14 @@ function expand() {
 }
 
 // ——————————————————————————————————————————————————————————————
-// 托盘菜单（Windows 上没有菜单栏图标，改放系统托盘）
+// 托盘菜单
 // ——————————————————————————————————————————————————————————————
 function createTray() {
   const iconPath = path.join(__dirname, 'build', 'icon.png')
   let img = nativeImage.createFromPath(iconPath)
   if (!img.isEmpty()) img = img.resize({ width: 16, height: 16 })
   tray = new Tray(img.isEmpty() ? nativeImage.createEmpty() : img)
-  tray.setToolTip('DS 鲸鱼娘桌宠')
+  tray.setToolTip('Antigravity 鲸鱼娘桌宠')
   const rebuild = () =>
     tray.setContextMenu(
       Menu.buildFromTemplate([
@@ -568,35 +423,38 @@ function createTray() {
           click: (mi) => {
             lowPower = mi.checked
             if (win) win.webContents.executeJavaScript('window.DSHPet && DSHPet.setLowPower && DSHPet.setLowPower(' + lowPower + ')').catch(() => {})
-          },
+          }
         },
-        { label: '一键安装插件（如果还没装）', click: installPlugin },
-        { label: '打开 DSH 界面', click: () => shell.openExternal(petBase + '/') },
+        { label: '打开网页版预览 (5199)', click: () => shell.openExternal('http://127.0.0.1:5199/') },
         { type: 'separator' },
-        { label: '彻底退出', click: () => app.quit() },
-      ]),
+        { label: '彻底退出', click: () => app.quit() }
+      ])
     )
   tray.on('click', () => (collapsed ? expand() : win && win.showInactive()))
-  setInterval(rebuild, 1500)
+  setInterval(rebuild, 2000)
   rebuild()
 }
 
 function resetPos() {
   if (!win) return
   const wa = screen.getPrimaryDisplay().workArea
-  win.setPosition(wa.x + wa.width - WIN_W - 8, wa.y + wa.height - WIN_H - 8)
+  win.setPosition(wa.x + wa.width - WIN_W - 16, wa.y + wa.height - WIN_H - 16)
   savePos()
 }
 
 // ——————————————————————————————————————————————————————————————
 app.whenReady().then(() => {
-  app.setAppUserModelId('com.andersen216.dsh.whalegirlpet')
+  app.setAppUserModelId('com.google.antigravity.whalegirlpet')
   createMain()
   createTray()
   ipcMain.on('reload', load)
 })
+
 app.on('window-all-closed', () => app.quit())
 app.on('before-quit', () => {
   clearInterval(pollTimer)
   clearInterval(dragTimer)
+  if (embeddedServer && typeof embeddedServer.close === 'function') {
+    embeddedServer.close()
+  }
 })

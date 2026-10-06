@@ -93,6 +93,26 @@
   const UI_BASE_HEIGHT = 180
   const log = (...a) => console.log('%c[鲸鱼娘]', 'color:#7c5cff', ...a)
 
+  /**
+   * 调起系统外部窗口 / 浏览器打开 URL：
+   * 优先通过 macOS Swift 宿主消息 open-url 唤起 Safari/Chrome，
+   * 兜底使用 window.open。
+   */
+  function openExternal(url) {
+    if (!url) return
+    try {
+      if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.dshpetshell) {
+        window.webkit.messageHandlers.dshpetshell.postMessage('open-url:' + url)
+        return
+      }
+    } catch (e) {}
+    try {
+      window.open(url, '_blank')
+    } catch (e) {
+      location.href = url
+    }
+  }
+
   // ——————————————————————————————————————————————————————————————
   // 一、性格表：桌宠「怎么演」全部写在这里
   // ——————————————————————————————————————————————————————————————
@@ -453,6 +473,17 @@
     create_goal: { mood: 'alert', prop: 'heartbeat' },
     update_goal: { mood: 'alert', prop: null },
     get_goal: { mood: 'thinking', prop: null },
+
+    // —— Antigravity 工具映射 ——
+    run_command: { mood: 'reading', prop: null },
+    view_file: { mood: 'reading', prop: 'auto' },
+    replace_file_content: { mood: 'reading', prop: null },
+    write_to_file: { mood: 'happy', prop: 'stickerCat' },
+    search_web: { mood: 'thinking', prop: 'auto' },
+    read_url_content: { mood: 'reading', prop: 'auto' },
+    ask_question: { mood: 'confused', prop: null },
+    codebase_search: { mood: 'reading', prop: 'auto' },
+    fetch_docs: { mood: 'reading', prop: 'auto' },
   }
 
   /**
@@ -747,12 +778,45 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
 @media (prefers-color-scheme:dark){
   .dshp-hud-tag.dshp-peak{background:rgba(255,86,110,.2);color:#ff8a9c;border-color:rgba(255,138,156,.4)}
   .dshp-hud-tag.dshp-valley{background:rgba(52,211,153,.18);color:#6ee7b7;border-color:rgba(110,231,183,.4)}}
+.dshp-tab-btn.dshp-quit{color:#ef4444!important}
+.dshp-tab-btn.dshp-quit:hover{background:rgba(239,68,68,.15)!important}
 .dshp-tab{position:fixed;right:16px;bottom:16px;z-index:2147483002;pointer-events:auto;cursor:pointer;
   border:1px solid var(--dshp-line);background:var(--dshp-bg);color:var(--dshp-fg);
   border-radius:20px;padding:6px 13px;font-size:12px;font-weight:600;
   box-shadow:0 6px 18px rgba(10,14,30,.28);transition:transform .12s ease;
   display:none;align-items:center;gap:6px;
   font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+.dshp-panel.dshp-wide{width:min(calc(460px * var(--dshp-ps)),94vw)!important}
+.dshp-history-wrap{display:flex;flex-direction:column;gap:10px;max-height:380px}
+.dshp-history-top{display:flex;gap:8px;align-items:center;padding-bottom:8px;border-bottom:1px solid var(--dshp-line)}
+.dshp-history-cur{padding:6px 10px;border-radius:8px;background:rgba(124,92,255,.14);color:var(--dshp-accent);font-size:11.5px;font-weight:600;display:flex;align-items:center;justify-content:space-between;gap:6px}
+.dshp-history-list{display:flex;flex-direction:column;gap:9px;overflow-y:auto;max-height:310px;padding-right:4px}
+.dshp-history-item{border:1px solid var(--dshp-line);border-radius:10px;padding:9px 12px;background:rgba(255,255,255,.03);transition:all .16s ease}
+.dshp-history-item:hover{border-color:var(--dshp-accent);background:rgba(124,92,255,.07);box-shadow:0 3px 12px rgba(124,92,255,.1)}
+.dshp-history-item.dshp-active{border-color:var(--dshp-accent);background:rgba(124,92,255,.12);box-shadow:0 0 10px rgba(124,92,255,.18)}
+.dshp-history-header{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.dshp-history-title{font-size:12.5px;font-weight:600;line-height:1.4;word-break:break-all;flex:1}
+.dshp-history-badge{font-size:10px;padding:2px 6px;border-radius:5px;background:var(--dshp-accent);color:#fff;white-space:nowrap;font-weight:600}
+.dshp-history-meta{display:flex;gap:8px;align-items:center;font-size:10.5px;opacity:.7;margin-top:4px}
+.dshp-history-snippet{font-size:11px;opacity:.8;margin-top:5px;line-height:1.4;word-break:break-all;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;background:rgba(0,0,0,.08);padding:4px 8px;border-radius:6px}
+.dshp-history-actions{display:flex;gap:6px;align-items:center;margin-top:8px;justify-content:flex-end}
+.dshp-history-btn{font-size:11.5px;padding:3px 10px;border-radius:6px;border:1px solid var(--dshp-line);background:transparent;color:inherit;cursor:pointer;transition:all .15s}
+.dshp-history-btn:hover{background:rgba(124,92,255,.15);border-color:var(--dshp-accent)}
+.dshp-history-btn.dshp-btn-primary{background:var(--dshp-accent);color:#fff;border-color:transparent}
+.dshp-history-btn.dshp-btn-del{color:#ef4444;border-color:rgba(239,68,68,.35)}
+.dshp-history-btn.dshp-btn-del:hover{background:rgba(239,68,68,.18);border-color:#ef4444}
+.dshp-history-msgs{margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(0,0,0,.2);max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:7px}
+.dshp-history-msg{font-size:11px;padding:5px 8px;border-radius:6px;line-height:1.4;word-break:break-word}
+.dshp-history-msg-user{background:rgba(124,92,255,.22);align-self:flex-end;max-width:90%}
+.dshp-history-msg-bot{background:rgba(255,255,255,.09);align-self:flex-start;max-width:90%}
+.dshp-history-empty{text-align:center;padding:30px 10px;opacity:.65;font-size:12px;line-height:1.8}
+.dshp-cur-session-hint{font-size:11px;color:var(--dshp-accent);margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;padding:3px 6px;border-radius:6px;background:rgba(124,92,255,.08)}
+.dshp-search-btn{transition:all .18s ease;font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid var(--dshp-line);background:transparent;color:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:4px;user-select:none}
+.dshp-search-btn:hover{background:rgba(59,130,246,.12);border-color:#3b82f6}
+.dshp-search-btn.dshp-on{background:rgba(59,130,246,.18);border-color:#3b82f6;color:#2563eb;font-weight:600;box-shadow:0 0 6px rgba(59,130,246,.25)}
+@media (prefers-color-scheme:dark){
+  .dshp-search-btn.dshp-on{background:rgba(59,130,246,.25);border-color:#60a5fa;color:#93c5fd;box-shadow:0 0 8px rgba(96,165,250,.35)}
+}
 `
 
   // ——————————————————————————————————————————————————————————————
@@ -1423,7 +1487,7 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
       exclusive: spec.exclusive,
       ms,
     })
-    if (spec.line) ui.bubble.show(spec.line, { name: 'DS 鲸鱼娘', ttl: Math.max(ms, 1800) })
+    if (spec.line) ui.bubble.show(spec.line, { name: '小胖次', ttl: Math.max(ms, 1800) })
     if (spec.motion) {
       playOneShot(spec.motion)
       // 只有**真的做动作**时才暂时不盯鼠标；单纯换个表情不该把视线也停掉，
@@ -2327,7 +2391,7 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
     // 正在思考/看资料：把话说到气泡正文里，别只更新脚注（那样看着像在摸鱼）
     if (!rig.talking && ui.bubble.visible) {
       ui.bubble.show(pickFresh(SAY[stepDef.say], 'work-' + stepDef.say), {
-        name: 'DS 鲸鱼娘',
+        name: '小胖次',
         busy: true,
         sticky: true,
       })
@@ -2348,7 +2412,7 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
     const bubbleEl = $('div', 'dshp-bubble')
     const head = $('div', 'dshp-head')
     const dot = $('span', 'dshp-dot')
-    const headText = $('span', null, 'DS 鲸鱼娘')
+    const headText = $('span', null, '小胖次')
     head.append(dot, headText)
     const body = $('div', 'dshp-body')
     const foot = $('div', 'dshp-foot')
@@ -2359,20 +2423,37 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
     const menuBtn = $('button', 'dshp-btn', '⋯')
     const hideBtn = $('button', 'dshp-btn', '–')
     hideBtn.title = '收起（桌面版会缩成贴边小球）'
-    // 主人要的：一键打开 DeepSeek Harness，纯符号不写字
-    const openBtn = $('button', 'dshp-btn dshp-icon', '↗')
-    openBtn.title = '打开 DeepSeek Harness 界面'
+    // Antigravity：一键清空会话上下文
+    const openBtn = $('button', 'dshp-btn dshp-icon', '🗑')
+    openBtn.title = '清空会话上下文'
     dock.append(talkBtn, menuBtn, hideBtn, openBtn)
 
     const composer = $('div', 'dshp-panel dshp-composer')
+    const curSessionHint = $('div', 'dshp-cur-session-hint')
+    const curSessionText = $('span', null, '💬 正在继续上一次对话…')
+    curSessionHint.append(curSessionText)
+
     const ta = $('textarea')
-    ta.placeholder = '跟 DSH 说点什么…（Enter 发送 / Shift+Enter 换行）'
+    ta.placeholder = '跟小胖次说点什么…（Enter 发送 / Shift+Enter 换行）'
     const crow = $('div', 'dshp-row')
+
+    // 新的对话要直接放在说话的那个窗口中
+    const newChatBtn = $('button', 'dshp-btn dshp-primary', '➕ 新对话')
+    newChatBtn.title = '开启一个全新的对话上下文（清空当前多轮连续记忆）'
+
+    const histBtn = $('button', 'dshp-btn', '📜 历史')
+    histBtn.title = '查看与管理历史对话'
+    histBtn.addEventListener('click', () => {
+      closePanels()
+      openMenu('history')
+    })
     const sendBtn = $('button', 'dshp-btn dshp-primary', '发送')
     const cancelBtn = $('button', 'dshp-btn', '打断')
-    crow.append($('span', 'dshp-grow'), cancelBtn, sendBtn)
-    const chint = $('div', 'dshp-hint', '发出去的话进入当前会话，回复会显示在气泡里。')
-    composer.append(ta, crow, chint)
+    const searchBtn = $('button', 'dshp-btn dshp-search-btn', '🌐 联网: 关')
+    searchBtn.title = 'Google 联网搜索（当前：关闭，点击开启）'
+    crow.append(newChatBtn, histBtn, searchBtn, $('span', 'dshp-grow'), cancelBtn, sendBtn)
+    const chint = $('div', 'dshp-hint', '发出去的话由小胖次响应，实时流式更新并同步口型与动作。')
+    composer.append(curSessionHint, ta, crow, chint)
     addCloseButton(composer)
 
     const menu = $('div', 'dshp-panel dshp-menu')
@@ -2382,32 +2463,43 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
     menu.append(tabs, panes)
     addCloseButton(menu)
 
-    const tab = $('div', 'dshp-tab', '🐋 鲸鱼娘')
+    const tab = $('div', 'dshp-tab', '🐋 小胖次')
 
-    // 右键弹出的 HUD（余额 / 本轮消耗 / 峰谷计价）
+    // 右键弹出的 HUD（Antigravity 状态 / 模型 / Tokens / 认证模式）
     const hud = $('div', 'dshp-hud')
     const hudHead = $('div', 'dshp-hud-head')
-    const hudTitle = $('span', null, '鲸鱼娘 · 钱包')
-    const hudDot = $('span', 'dshp-hud-tag dshp-valley', '谷')
+    const hudTitle = $('span', null, '小胖次 · 状态')
+    const hudDot = $('span', 'dshp-hud-tag dshp-valley', '联机')
     hudHead.append(hudTitle, hudDot)
     const hudMoney = $('div', 'dshp-hud-money')
-    const hudMoneyNum = $('b', null, '—')
-    const hudMoneyCur = $('span', null, 'CNY')
+    const hudMoneyNum = $('b', null, 'gemini-3.5-flash-lite')
+    const hudMoneyCur = $('span', null, '')
     hudMoney.append(hudMoneyNum, hudMoneyCur)
     const hudRowToday = $('div', 'dshp-hud-row')
     const hudTodayV = $('span', 'dshp-hud-v', '—')
-    hudRowToday.append($('span', 'dshp-hud-k', '今日已用'), hudTodayV)
+    hudRowToday.append($('span', 'dshp-hud-k', '总消耗'), hudTodayV)
     const hudRowTurn = $('div', 'dshp-hud-row')
     const hudTurnV = $('span', 'dshp-hud-v', '—')
-    hudRowTurn.append($('span', 'dshp-hud-k', '本轮消耗'), hudTurnV)
+    hudRowTurn.append($('span', 'dshp-hud-k', '当前轮次'), hudTurnV)
+    const hudRowAuth = $('div', 'dshp-hud-row')
+    const hudAuthV = $('span', 'dshp-hud-v', '—')
+    hudRowAuth.append($('span', 'dshp-hud-k', '鉴权模式'), hudAuthV)
     const hudRowCd = $('div', 'dshp-hud-row')
     const hudCdV = $('span', 'dshp-hud-v', '—')
-    hudRowCd.append($('span', 'dshp-hud-k', '距切换'), hudCdV)
+    hudRowCd.append($('span', 'dshp-hud-k', '当前模式'), hudCdV)
+
+    const hudAuthRow = $('div', 'dshp-row')
+    hudAuthRow.style.marginTop = '6px'
+    const hudLoginBtn = $('button', 'dshp-btn dshp-primary', '🔑 登录 Google')
+    const hudApiBtn = $('button', 'dshp-btn', '⚙️ 配置 API')
+    hudAuthRow.append(hudLoginBtn, hudApiBtn)
+
     const hudFoot = $('div', 'dshp-hud-foot', '')
     hud.append(
       hudHead, hudMoney,
       $('div', 'dshp-hud-sep'),
-      hudRowTurn, hudRowToday, hudRowCd,
+      hudRowTurn, hudRowToday, hudRowAuth, hudRowCd,
+      hudAuthRow,
       hudFoot,
     )
     addCloseButton(hud, () => closeHud())
@@ -2420,7 +2512,7 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
       stage,
       tab,
       bubble: makeBubble(bubbleEl, body, foot, dot, headText),
-      composer: { el: composer, ta, send: sendBtn, cancel: cancelBtn },
+      composer: { el: composer, ta, send: sendBtn, cancel: cancelBtn, searchBtn, newChatBtn, curSessionText, hint: chint },
       menu: { el: menu, tabs, panes, focused: null },
       hud: {
         el: hud,
@@ -2429,12 +2521,63 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
         currency: hudMoneyCur,
         today: hudTodayV,
         turn: hudTurnV,
+        auth: hudAuthV,
         countdown: hudCdV,
         foot: hudFoot,
         title: hudTitle,
+        loginBtn: hudLoginBtn,
+        apiBtn: hudApiBtn,
       },
       dock,
     }
+
+    hudLoginBtn.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      try {
+        await fetch('/api/auth/mode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'oauth' })
+        })
+        hudFetch(true)
+        const stRes = await fetch('/api/auth/status')
+        const st = await stRes.json()
+        if (!st.isGoogleLoggedIn) {
+          closeHud()
+          openMenu('setting')
+          ui.bubble.show('已切换为【Google 登录】模式！请在设置中唤起浏览器完成授权~', { name: '小胖次', ttl: 3500 })
+        } else {
+          ui.bubble.show(`已切换为【Google 登录】模式 (${st.user ? st.user.email : '已登录'})！`, { name: '小胖次', ttl: 2200 })
+        }
+      } catch (err) {
+        closeHud()
+        openMenu('setting')
+      }
+    })
+
+    hudApiBtn.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      try {
+        await fetch('/api/auth/mode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'apikey' })
+        })
+        hudFetch(true)
+        const stRes = await fetch('/api/auth/status')
+        const st = await stRes.json()
+        if (!st.hasApiKey) {
+          closeHud()
+          openMenu('setting')
+          ui.bubble.show('已切换为【API 模式】！请在设置面板中填入您的 API Key 哦~', { name: '小胖次', ttl: 3500 })
+        } else {
+          ui.bubble.show(`已切换为【API 模式】 (${st.apiKeyMasked || '已配置密钥'})！`, { name: '小胖次', ttl: 2200 })
+        }
+      } catch (err) {
+        closeHud()
+        openMenu('setting')
+      }
+    })
     bindComposer(u)
     bindMenu(u)
     // 这里不能调 setHidden()——此刻 ui 还没赋值（ui = buildUI() 才刚返回），
@@ -2472,6 +2615,7 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
         foot.textContent = opts.foot || ''
         dot.classList.toggle('dshp-pulse', !!opts.busy)
         el.classList.add('dshp-on')
+        if (typeof placePanel === 'function') requestAnimationFrame(() => placePanel(el))
         if (timer) clearTimeout(timer)
         const ttl = opts.sticky ? 0 : opts.ttl != null ? opts.ttl : CFG.bubbleTtlMs
         if (ttl > 0) timer = setTimeout(() => api.hide(), ttl)
@@ -2597,6 +2741,11 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
     document.addEventListener(
       'contextmenu',
       (e) => {
+        const target = e.target
+        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+          // 在输入框内允许原生的右键剪切、复制、粘贴上下文菜单
+          return
+        }
         if (!hitTest(e.clientX, e.clientY)) return
         e.preventDefault()
         e.stopPropagation()
@@ -2618,6 +2767,43 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
       },
       true,
     )
+
+    // 全局增强：确保输入框内快捷键（Cmd+V / Ctrl+V / Cmd+C / Cmd+A / Cmd+X）在任何环境与桌面壳中均可正常使用
+    window.addEventListener('keydown', async (e) => {
+      const isCmdOrCtrl = e.metaKey || e.ctrlKey
+      if (!isCmdOrCtrl) return
+
+      const active = document.activeElement
+      const isInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')
+      if (!isInput) return
+
+      const k = (e.key || '').toLowerCase()
+      if (k === 'a') {
+        if (typeof active.select === 'function') {
+          active.select()
+        }
+        return
+      }
+
+      if (k === 'v') {
+        // 剪贴板粘贴辅助
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          try {
+            const clipText = await navigator.clipboard.readText()
+            if (clipText && !active.readOnly) {
+              const start = active.selectionStart ?? active.value.length
+              const end = active.selectionEnd ?? active.value.length
+              const val = active.value || ''
+              active.value = val.slice(0, start) + clipText + val.slice(end)
+              active.selectionStart = active.selectionEnd = start + clipText.length
+              active.dispatchEvent(new Event('input', { bubbles: true }))
+              active.dispatchEvent(new Event('change', { bubbles: true }))
+              e.preventDefault()
+            }
+          } catch (_) {}
+        }
+      }
+    }, true)
 
     window.addEventListener('resize', () => {
       fitModel()
@@ -2648,7 +2834,7 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
 
     // 面板内点击不要穿透到下面的界面
     for (const el of [ui.composer.el, ui.menu.el, ui.hud.el, ui.dock]) {
-      el.addEventListener('pointerdown', (e) => e.stopPropagation())
+      if (el) el.addEventListener('pointerdown', (e) => e.stopPropagation())
     }
 
     // 鼠标停在 HUD 上时不要自动收（主人在看）
@@ -3164,47 +3350,45 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
     if (!ui || !ui.hud) return
     const h = ui.hud
     const d = hud.data || {}
-    const peak = d.isPeak === true
-    h.badge.textContent = d.isPeak === undefined || d.isPeak === null ? '—' : peak ? '峰' : '谷'
-    h.badge.className = 'dshp-hud-tag ' + (peak ? 'dshp-peak' : 'dshp-valley')
-    if (d.ok === false && d.code === 'NO_KEY') {
-      h.money.textContent = '未配置'
-      h.foot.textContent = '没读到 DEEPSEEK_API_KEY，所以看不到余额。\n在 DSH 里配好 key 就能显示。'
-    } else if (d.ok === false) {
-      h.money.textContent = '—'
-    } else if (!hud.data) {
-      h.money.textContent = '—'
-    } else {
-      h.money.textContent = money(d.totalBalance, d.currency)
-      h.currency.textContent = d.currency || 'CNY'
-    }
-    h.today.textContent = d.todayUsage === undefined || d.todayUsage === null ? '—' : money(d.todayUsage, d.todayUsageCurrency || d.currency)
+    const isMock = d.totalBalance === 'Local Mock' || (d.balance && d.balance.totalBalance === 'Local Mock')
+    h.badge.textContent = isMock ? '本地' : '联机'
+    h.badge.className = 'dshp-hud-tag ' + (isMock ? 'dshp-valley' : 'dshp-peak')
+    h.title.textContent = 'Antigravity · 状态'
+    h.money.textContent = (d.balance && d.balance.currency) || d.currency || 'gemini-3.5-flash-lite'
+    h.currency.textContent = isMock ? '(模拟)' : '(API)'
+    
+    const usage = d.todayUsage != null ? d.todayUsage : (d.today && d.today.tokens != null ? d.today.tokens : 0)
+    h.today.textContent = Number(usage).toLocaleString() + ' tokens'
 
-    // 本轮消耗：金额 + tokens
+    // 当前轮次与 Token
     const t = hud.turn || {}
-    if (t.amount === undefined || t.amount === null) {
-      h.turn.textContent = '—'
-    } else {
-      h.turn.textContent = money(t.amount, d.currency) + (t.tokens ? ' · ' + Number(t.tokens).toLocaleString() + ' tokens' : '')
+    h.turn.textContent = '第 ' + (t.seq || 0) + ' 轮' + (t.tokens ? ' · ' + Number(t.tokens).toLocaleString() + ' tokens' : '')
+
+    // 鉴权模式与账号状态
+    const auth = d.auth || {}
+    if (h.auth) {
+      if (auth.authType === 'oauth') {
+        const emailShort = (auth.user && auth.user.email) ? auth.user.email.split('@')[0] : ''
+        h.auth.textContent = 'Google 登录' + (emailShort ? ` (${emailShort})` : (auth.isGoogleLoggedIn ? ' (已登录)' : ''))
+      } else {
+        h.auth.textContent = 'API 模式' + (auth.hasKey ? ` (${auth.apiKeyMasked || '已配置'})` : '')
+      }
+    }
+    if (h.loginBtn && h.apiBtn) {
+      const isOAuth = auth.authType === 'oauth'
+      h.loginBtn.textContent = '🌐 Google 登录'
+      h.apiBtn.textContent = '🔑 API 模式'
+      h.loginBtn.classList.toggle('dshp-primary', isOAuth)
+      h.apiBtn.classList.toggle('dshp-primary', !isOAuth)
     }
 
-    // 倒计时：宿主给的切换时刻是权威（含周末/法定节假日规则）
-    if (d.peakNextChangeAt) {
-      const left = d.peakNextChangeAt - Math.floor(Date.now() / 1000)
-      hud.left = left
-      h.countdown.textContent = humanLeft(left)
-    } else {
-      h.countdown.textContent = '—'
-    }
+    // 工作模式 / 描述
+    h.countdown.textContent = d.priceNote ? d.priceNote.replace(/^模式：/, '') : 'chat'
 
-    const src = []
-    if (!hud.source) src.push('数据：读不到余额接口')
-    else if (hud.source === 'self') src.push('数据：桌宠自带记账' + (d.version ? ' v' + d.version : ''))
-    else src.push('数据：dsh-whale-widget' + (d.version ? ' v' + d.version : ''))
-    if (hud.err) src.push(hud.err)
+    const src = ['Antigravity Live2D 适配通道正常']
     if (t.ts) src.push('本轮：' + new Date(t.ts).toLocaleTimeString('zh-CN', { hour12: false }))
-    src.push(hud.fetchedAt ? '更新于 ' + new Date(hud.fetchedAt).toLocaleTimeString('zh-CN', { hour12: false }) : '')
-    h.foot.textContent = src.filter(Boolean).join('\n')
+    if (hud.fetchedAt) src.push('更新于 ' + new Date(hud.fetchedAt).toLocaleTimeString('zh-CN', { hour12: false }))
+    h.foot.textContent = src.join('\n')
   }
 
   let hudLastForce = 0
@@ -3232,6 +3416,8 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
         currency: (self.balance && self.balance.currency) || 'CNY',
         todayUsage: self.today ? self.today.amount : undefined,
         todayUsageCurrency: (self.balance && self.balance.currency) || 'CNY',
+        priceNote: self.priceNote,
+        auth: self.auth,
       }
       if (self.balance && self.balance.ok === false) {
         hud.data.code = self.balance.code
@@ -3451,8 +3637,74 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
     ui.root.classList.remove('dshp-open')
   }
 
+  function showAuthModal() {
+    openMenu('setting')
+  }
+
   function bindComposer(u) {
-    const { ta, send, cancel } = u.composer
+    const { ta, send, cancel, searchBtn, newChatBtn, curSessionText, hint } = u.composer
+    let searchEnabled = false // 默认为关闭
+
+    const updateCurrentSessionHint = async () => {
+      try {
+        const r = await fetch('/api/history')
+        const j = await r.json()
+        if (j && j.sessions && curSessionText) {
+          const act = j.sessions.find(s => s.id === j.currentId)
+          if (act && act.title && act.title !== '新对话') {
+            curSessionText.textContent = `💬 继续对话：「${act.title}」`
+          } else {
+            curSessionText.textContent = '💬 当前对话：全新对话'
+          }
+        }
+      } catch (_) {}
+    }
+    updateCurrentSessionHint()
+
+    const updateSearchUI = () => {
+      if (!searchBtn) return
+      searchBtn.textContent = searchEnabled ? '🌐 联网: 开' : '🌐 联网: 关'
+      searchBtn.title = searchEnabled 
+        ? 'Google 联网搜索（Grounding）：当前已开启，点击可关闭' 
+        : 'Google 联网搜索（Grounding）：当前已关闭，点击可开启'
+      searchBtn.classList.toggle('dshp-on', searchEnabled)
+      if (hint) {
+        hint.textContent = searchEnabled
+          ? '🔍 联网模式已开启：小胖次将通过 Google Search 检索最新网络资讯~'
+          : '发出去的话由小胖次响应，实时流式更新并同步口型与动作。'
+      }
+    }
+    updateSearchUI()
+
+    if (searchBtn) {
+      searchBtn.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        searchEnabled = !searchEnabled
+        updateSearchUI()
+        ui.bubble.show(searchEnabled ? '联网搜索已开启！小胖次会去网上查最新消息哦~' : '联网搜索已关闭，使用小胖次自身知识~', { name: '小胖次', ttl: 1800 })
+      })
+    }
+
+    if (newChatBtn) {
+      newChatBtn.addEventListener('click', async (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        try {
+          const r = await fetch('/api/history/new', { method: 'POST' })
+          const j = await r.json()
+          if (j && j.ok) {
+            ta.value = ''
+            if (curSessionText) curSessionText.textContent = '💬 当前对话：全新对话'
+            ui.bubble.show('已开启全新对话！想跟小胖次聊点什么呢？', { name: '小胖次', ttl: 2200 })
+            ta.focus()
+          }
+        } catch (err) {
+          ui.bubble.show('开启新对话失败：' + err.message, { name: '小胖次', ttl: 2200 })
+        }
+      })
+    }
+
     const stop = (e) => e.stopPropagation()
     for (const ev of ['keydown', 'keyup', 'keypress']) ta.addEventListener(ev, stop)
     ta.addEventListener('keydown', (e) => {
@@ -3470,9 +3722,9 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
           body: '{}',
         })
         const j = await r.json()
-        u.bubble.show(j.ok ? '打断啦' : '打断失败：' + (j.error || '未知'), { name: 'DS 鲸鱼娘', ttl: 2000 })
+        u.bubble.show(j.ok ? '打断啦' : '打断失败：' + (j.error || '未知'), { name: '小胖次', ttl: 2000 })
       } catch (err) {
-        u.bubble.show('打断失败：' + err.message, { name: 'DS 鲸鱼娘', ttl: 2600 })
+        u.bubble.show('打断失败：' + err.message, { name: '小胖次', ttl: 2600 })
       }
     })
 
@@ -3482,20 +3734,21 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
         ta.focus()
         return
       }
+      ta.value = ''
+      closePanels()
       send.disabled = true
+      u.bubble.show(text, { name: '你', sticky: true })
+      setReaction({ mood: 'listening', props: IDLE_PROPS, ms: 2000 })
       try {
         const r = await fetch(BASE + '/say', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text }),
+          body: JSON.stringify({ text, search: searchEnabled }),
         })
         const j = await r.json()
         if (!j.ok) throw new Error(j.error || '发送失败')
-        ta.value = ''
-        closePanels()
-        act({ mood: 'listening', props: IDLE_PROPS, line: text, ms: 2600 })
       } catch (err) {
-        u.bubble.show('发不出去：' + err.message, { name: 'DS 鲸鱼娘', sticky: true })
+        u.bubble.show('发不出去：' + err.message, { name: '小胖次', sticky: true })
       } finally {
         send.disabled = false
       }
@@ -3503,26 +3756,39 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
   }
 
   function openMenu(which) {
-    closeHud() // 菜单和 HUD 不同时占屏幕
+    closeHud()
     ui.root.classList.add('dshp-open')
-    // 立刻夹一次（getBoundingClientRect 会强制重排，拿到的是最终横向位置），
-    // 再在下一帧补一次——只等 rAF 的话，测试/快照可能量到还没夹的面板
     clampPanels()
-    // 面板是以模型为中心左右展开的，蹲在角落时右半边会跑到屏幕外——
-    // 等布局落定后夹回视口内（关闭按钮和滑块必须点得到）
     requestAnimationFrame(() => clampPanels())
-    // 气泡和面板都挂在桌宠上方，同时出现会互相挡住——开面板就把气泡收起来
     ui.bubble.hide()
     if (which === 'talk') {
       ui.menu.el.classList.remove('dshp-on')
       ui.composer.el.classList.add('dshp-on')
       setTimeout(() => ui.composer.ta.focus(), 60)
+      fetch('/api/history').then(r => r.json()).then(j => {
+        if (j && j.sessions && ui.composer.curSessionText) {
+          const act = j.sessions.find(s => s.id === j.currentId)
+          if (act && act.title && act.title !== '新对话') {
+            ui.composer.curSessionText.textContent = `💬 继续对话：「${act.title}」`
+          } else {
+            ui.composer.curSessionText.textContent = '💬 当前对话：全新对话'
+          }
+        }
+      }).catch(() => {})
     } else {
       ui.composer.el.classList.remove('dshp-on')
-      renderPane(ui.menu.focused || 'face')
+      const targetTab = (which && which !== 'menu') ? which : (ui.menu.focused || 'face')
+      ui.menu.focused = targetTab
+      for (const el of ui.menu.tabs.children) el.classList.toggle('dshp-active', el.dataset.tab === targetTab)
+      renderPane(targetTab)
       ui.menu.el.classList.add('dshp-on')
+      if (targetTab === 'setting') {
+        setTimeout(() => {
+          const ab = ui.menu.panes.querySelector('.dshp-auth-box') || ui.menu.panes.querySelector('input')
+          if (ab) ab.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }, 100)
+      }
     }
-    // 面板真正显示之后再夹一次（上面那次夹在 class 加之前，量不到它）
     clampPanels()
   }
 
@@ -3532,14 +3798,26 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
       ['decor', '装饰'],
       ['scene', '场景'],
       ['action', '动作'],
+      ['history', '历史'],
       ['setting', '设置'],
+      ['quit', '退出程序'],
     ]
     u.menu.focused = 'face'
     for (const [id, label] of TABS) {
       const b = $('button', 'dshp-tab-btn', label)
       b.dataset.tab = id
+      if (id === 'quit') b.classList.add('dshp-quit')
       if (id === u.menu.focused) b.classList.add('dshp-active')
       b.addEventListener('click', () => {
+        if (id === 'quit') {
+          closePanels()
+          ui.bubble.show('小胖次先退下啦，想叫我就去「应用程序」里双击我～', { name: '小胖次', ttl: 2200 })
+          setTimeout(() => {
+            shell.post('quit')
+            try { window.close() } catch (e) {}
+          }, 300)
+          return
+        }
         u.menu.focused = id
         for (const el of u.menu.tabs.children) el.classList.toggle('dshp-active', el.dataset.tab === id)
         renderPane(id)
@@ -3559,17 +3837,24 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
       closePanels()
       setHidden(true)
     })
-    // 第 4 个：打开 DeepSeek Harness。桌面壳里交给原生用默认浏览器打开，
-    // 浏览器版直接新开一个标签页。
-    u.dock.children[3].addEventListener('click', () => {
-      if (shell.on) shell.post('open-dsh')
-      else window.open(BASE.replace(/\/dsh-pet$/, '') + '/', '_blank')
+    // 第 4 个：清空会话上下文（原为打开 DeepSeek Harness）
+    u.dock.children[3].addEventListener('click', async () => {
+      try {
+        const r = await fetch('/api/clear', { method: 'POST' })
+        const j = await r.json()
+        ui.bubble.show('会话上下文已清空~ 我们重新开始吧！', { name: '小胖次', ttl: 2500 })
+        if (typeof hudFetch === 'function') hudFetch(true)
+      } catch (e) {
+        ui.bubble.show('清空失败：' + e.message, { name: '小胖次', ttl: 2500 })
+      }
     })
   }
 
   function renderPane(id) {
     const panes = ui.menu.panes
     panes.textContent = ''
+    ui.menu.el.classList.toggle('dshp-wide', id === 'history')
+    clampPanels()
     // 顶上永远有一行「她现在是什么状态」，免得一堆按钮里看不出哪个是开着的
     panes.appendChild($('div', 'dshp-hint dshp-now', menuStatusLine()))
     if (id === 'face') {
@@ -3685,6 +3970,187 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
         grid,
         $('div', 'dshp-hint', '动作是**一次性的**：演一遍就自己消失，不会一直挂着。\n（要一直留着的，去「装饰」和「场景」两页——蛋包饭也在这页，挤完酱就没了。）'),
       )
+      return
+    }
+    if (id === 'history') {
+      const wrap = $('div', 'dshp-history-wrap')
+
+      const topBar = $('div', 'dshp-history-top')
+      const newBtn = $('button', 'dshp-history-btn dshp-btn-primary', '➕ 新对话')
+      newBtn.title = '开启一个全新的对话上下文'
+      const clearBtn = $('button', 'dshp-history-btn dshp-btn-del', '清空历史')
+      clearBtn.title = '清空所有历史对话'
+      const refreshBtn = $('button', 'dshp-history-btn', '🔄 刷新')
+      topBar.append(newBtn, clearBtn, $('span', 'dshp-grow'), refreshBtn)
+      wrap.appendChild(topBar)
+
+      const curBanner = $('div', 'dshp-history-cur')
+      curBanner.textContent = '当前会话加载中…'
+      wrap.appendChild(curBanner)
+
+      const listContainer = $('div', 'dshp-history-list')
+      listContainer.innerHTML = '<div class="dshp-history-empty">正在加载历史记录…</div>'
+      wrap.appendChild(listContainer)
+      panes.appendChild(wrap)
+
+      const loadHistory = async () => {
+        try {
+          const res = await fetch('/api/history')
+          const data = await res.json()
+          listContainer.textContent = ''
+
+          if (!data || !data.sessions || data.sessions.length === 0) {
+            curBanner.textContent = '当前会话：全新对话（暂无历史）'
+            listContainer.innerHTML = '<div class="dshp-history-empty">暂无历史对话记录。<br>在聊天框发消息后会自动保存哦！</div>'
+            return
+          }
+
+          const activeId = data.activeSessionId
+          const activeSession = data.sessions.find(s => s.id === activeId)
+          if (activeSession) {
+            curBanner.textContent = `当前进行中：${activeSession.title}`
+          } else {
+            curBanner.textContent = '当前进行中：全新会话'
+          }
+
+          for (const s of data.sessions) {
+            const item = $('div', 'dshp-history-item')
+            if (s.id === activeId) item.classList.add('dshp-active')
+
+            const header = $('div', 'dshp-history-header')
+            const title = $('div', 'dshp-history-title', s.title || '无标题会话')
+            header.appendChild(title)
+            if (s.id === activeId) {
+              header.appendChild($('span', 'dshp-history-badge', '当前'))
+            }
+
+            const meta = $('div', 'dshp-history-meta')
+            const timeStr = s.updatedAt ? new Date(s.updatedAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
+            meta.append($('span', null, timeStr), $('span', null, `· ${s.messageCount || 0}条对话`))
+
+            const snippet = $('div', 'dshp-history-snippet', s.snippet || '（暂无消息预览）')
+
+            const actions = $('div', 'dshp-history-actions')
+            const resumeBtn = $('button', 'dshp-history-btn dshp-btn-primary', s.id === activeId ? '💬 继续此对话' : '💬 切换并继续')
+            const viewBtn = $('button', 'dshp-history-btn', '👁️ 展开查看')
+            const delBtn = $('button', 'dshp-history-btn dshp-btn-del', '🗑 删除')
+
+            actions.append(resumeBtn, viewBtn, delBtn)
+            item.append(header, meta, snippet, actions)
+
+            // 详情预览折叠框
+            let msgsBox = null
+            viewBtn.addEventListener('click', async (e) => {
+              e.stopPropagation()
+              if (msgsBox) {
+                msgsBox.remove()
+                msgsBox = null
+                viewBtn.textContent = '👁️ 展开查看'
+                return
+              }
+              viewBtn.textContent = '加载中…'
+              try {
+                const dres = await fetch(`/api/history/detail?id=${encodeURIComponent(s.id)}`)
+                const ddata = await dres.json()
+                if (ddata && ddata.session && ddata.session.messages) {
+                  msgsBox = $('div', 'dshp-history-msgs')
+                  for (const m of ddata.session.messages) {
+                    const mdiv = $('div', `dshp-history-msg ${m.role === 'user' ? 'dshp-history-msg-user' : 'dshp-history-msg-bot'}`)
+                    const roleTag = m.role === 'user' ? '你: ' : '小胖次: '
+                    mdiv.textContent = roleTag + (m.content || '')
+                    msgsBox.appendChild(mdiv)
+                  }
+                  item.appendChild(msgsBox)
+                  viewBtn.textContent = '🔼 收起消息'
+                } else {
+                  viewBtn.textContent = '无消息'
+                }
+              } catch (err) {
+                viewBtn.textContent = '加载失败'
+              }
+            })
+
+            resumeBtn.addEventListener('click', async (e) => {
+              e.stopPropagation()
+              try {
+                const r = await fetch('/api/history/resume', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ id: s.id })
+                })
+                const rdata = await r.json()
+                if (rdata && rdata.ok) {
+                  ui.bubble.show(`已载入对话「${s.title}」，继续聊吧~`, { name: '小胖次', ttl: 2200 })
+                  closePanels()
+                  openMenu('talk')
+                } else {
+                  ui.bubble.show('切换会话失败：' + (rdata.error || '未知错误'), { name: '小胖次', ttl: 2200 })
+                }
+              } catch (err) {
+                ui.bubble.show('切换会话失败：' + err.message, { name: '小胖次', ttl: 2200 })
+              }
+            })
+
+            delBtn.addEventListener('click', async (e) => {
+              e.stopPropagation()
+              if (!confirm(`确定要删除对话「${s.title}」吗？`)) return
+              try {
+                const r = await fetch('/api/history/delete', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ id: s.id })
+                })
+                const rdata = await r.json()
+                if (rdata && rdata.ok) {
+                  ui.bubble.show('已删除该对话~', { name: '小胖次', ttl: 1800 })
+                  loadHistory()
+                } else {
+                  ui.bubble.show('删除失败：' + (rdata.error || '未知错误'), { name: '小胖次', ttl: 2200 })
+                }
+              } catch (err) {
+                ui.bubble.show('删除失败：' + err.message, { name: '小胖次', ttl: 2200 })
+              }
+            })
+
+            listContainer.appendChild(item)
+          }
+        } catch (err) {
+          listContainer.innerHTML = `<div class="dshp-history-empty">加载历史记录失败：${err.message}</div>`
+        }
+      }
+
+      newBtn.addEventListener('click', async () => {
+        try {
+          const r = await fetch('/api/history/new', { method: 'POST' })
+          const rdata = await r.json()
+          if (rdata && rdata.ok) {
+            ui.bubble.show('已开启全新对话上下文！', { name: '小胖次', ttl: 2000 })
+            if (ui.composer && ui.composer.ta) ui.composer.ta.value = ''
+            if (ui.composer && ui.composer.curSessionText) ui.composer.curSessionText.textContent = '💬 当前对话：全新对话'
+            loadHistory()
+          }
+        } catch (err) {
+          ui.bubble.show('开启新对话失败：' + err.message, { name: '小胖次', ttl: 2000 })
+        }
+      })
+
+      clearBtn.addEventListener('click', async () => {
+        if (!confirm('确定要清空全部历史对话吗？此操作不可逆！')) return
+        try {
+          const r = await fetch('/api/history/clear', { method: 'POST' })
+          const rdata = await r.json()
+          if (rdata && rdata.ok) {
+            ui.bubble.show('所有历史记录已清空！', { name: '小胖次', ttl: 2000 })
+            loadHistory()
+          }
+        } catch (err) {
+          ui.bubble.show('清空失败：' + err.message, { name: '小胖次', ttl: 2000 })
+        }
+      })
+
+      refreshBtn.addEventListener('click', () => loadHistory())
+
+      loadHistory()
       return
     }
     // setting
@@ -3826,10 +4292,480 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
     resetAll.addEventListener('click', () => {
       resetEverything()
       renderPane('setting')
-      ui.bubble.show('回到平常状态啦', { name: 'DS 鲸鱼娘', ttl: 2200 })
+      ui.bubble.show('回到平常状态啦', { name: '小胖次', ttl: 2200 })
     })
     row0.appendChild(resetAll)
     box.append(themeRow, row0)
+
+    // 鉴权管理：Google OAuth 2.0 与 API Key
+    const authBox = $('div', 'dshp-auth-box')
+    authBox.style.cssText = 'margin:10px 0;padding:10px 12px;background:rgba(124,92,255,.08);border:1px solid var(--dshp-line);border-radius:10px;'
+    
+    const authTitleRow = $('div', 'dshp-row')
+    authTitleRow.style.cssText = 'justify-content:space-between;align-items:center;margin-bottom:6px;'
+    const authTitle = $('span', 'dshp-hint', '🔑 模型鉴权管理 (Google 账号 / API Key)')
+    authTitle.style.fontWeight = '600'
+    authTitle.style.color = 'var(--dshp-accent)'
+    authTitleRow.append(authTitle)
+
+    const authStatusText = $('div', 'dshp-hint', '正在查询鉴权状态…')
+    authStatusText.style.marginBottom = '8px'
+    authStatusText.style.fontSize = '12px'
+
+    const modeSwitchRow = $('div', 'dshp-row')
+    modeSwitchRow.style.marginBottom = '8px'
+    const btnOAuthMode = $('button', 'dshp-btn', '🌐 Google 账号模式')
+    const btnApiKeyMode = $('button', 'dshp-btn', '🔑 API Key 模式')
+    modeSwitchRow.append(btnOAuthMode, btnApiKeyMode)
+
+    // 快捷粘贴按钮生成器
+    const makePasteBtn = (input) => {
+      const pBtn = $('button', 'dshp-btn', '📋')
+      pBtn.title = '从剪贴板粘贴'
+      pBtn.style.cssText = 'padding:4px 7px;font-size:11px;flex-shrink:0;'
+      pBtn.addEventListener('click', async () => {
+        try {
+          if (navigator.clipboard && navigator.clipboard.readText) {
+            const t = await navigator.clipboard.readText()
+            if (t) {
+              input.value = t
+              input.dispatchEvent(new Event('input', { bubbles: true }))
+              input.dispatchEvent(new Event('change', { bubbles: true }))
+              ui.bubble.show('已从剪贴板粘贴~', { name: '小胖次', ttl: 1500 })
+              return
+            }
+          }
+        } catch (_) {}
+        input.focus()
+        input.select()
+        ui.bubble.show('请按快捷键 Cmd+V 进行粘贴~', { name: '小胖次', ttl: 2000 })
+      })
+      return pBtn
+    }
+
+    // Google 认证区域
+    const googleSec = $('div', null)
+    googleSec.style.marginBottom = '8px'
+
+    const googleLoginInfo = $('div', 'dshp-hint', '⚪ 未登录 Google 账号')
+    googleLoginInfo.style.cssText = 'margin-bottom:6px;font-size:12px;font-weight:500;'
+    const googleLoginActions = $('div', 'dshp-row')
+    googleLoginActions.style.marginBottom = '10px'
+    const googleLoginBtn = $('button', 'dshp-btn dshp-primary', '🚀 唤起浏览器登录 Google 账号')
+    googleLoginBtn.style.flex = '1'
+    const googleLogoutBtn = $('button', 'dshp-btn', '退出 Google 账号')
+    googleLogoutBtn.style.display = 'none'
+    googleLoginActions.append(googleLoginBtn, googleLogoutBtn)
+
+    const googleCredBox = $('div', null)
+    googleCredBox.style.cssText = 'padding:8px;border:1px dashed var(--dshp-line);border-radius:8px;background:rgba(0,0,0,0.06);margin-top:6px;'
+    const credHint = $('div', 'dshp-hint', 'Google Cloud OAuth 2.0 凭据 (Client ID & Secret):')
+    credHint.style.marginBottom = '6px'
+
+    const clientIdRow = $('div', 'dshp-row')
+    clientIdRow.style.cssText = 'display:flex;gap:4px;margin-bottom:5px;align-items:center;'
+    const clientIdIn = $('input')
+    clientIdIn.placeholder = 'Google Client ID (*.apps.googleusercontent.com)'
+    clientIdIn.style.cssText = 'flex:1;box-sizing:border-box;padding:4px 7px;border-radius:6px;border:1px solid var(--dshp-line);background:transparent;color:inherit;font-size:11px;'
+    clientIdRow.append(clientIdIn, makePasteBtn(clientIdIn))
+
+    const clientSecretRow = $('div', 'dshp-row')
+    clientSecretRow.style.cssText = 'display:flex;gap:4px;margin-bottom:5px;align-items:center;'
+    const clientSecretIn = $('input')
+    clientSecretIn.type = 'password'
+    clientSecretIn.placeholder = 'Google Client Secret 密钥'
+    clientSecretIn.style.cssText = 'flex:1;box-sizing:border-box;padding:4px 7px;border-radius:6px;border:1px solid var(--dshp-line);background:transparent;color:inherit;font-size:11px;'
+    const toggleSecretEye = $('button', 'dshp-btn', '👁️')
+    toggleSecretEye.title = '显示/隐藏密钥'
+    toggleSecretEye.style.cssText = 'padding:4px 7px;font-size:11px;flex-shrink:0;'
+    toggleSecretEye.addEventListener('click', () => {
+      clientSecretIn.type = clientSecretIn.type === 'password' ? 'text' : 'password'
+      toggleSecretEye.textContent = clientSecretIn.type === 'password' ? '👁️' : '🙈'
+    })
+    clientSecretRow.append(clientSecretIn, toggleSecretEye, makePasteBtn(clientSecretIn))
+
+    const redirectHint = $('div', 'dshp-hint', '已获授权重定向 URI (请在 Google Cloud 控制台中填入此地址):')
+    redirectHint.style.marginTop = '4px'
+    redirectHint.style.marginBottom = '2px'
+    redirectHint.style.fontSize = '10px'
+    redirectHint.style.opacity = '0.75'
+    const redirectRow = $('div', 'dshp-row')
+    redirectRow.style.cssText = 'display:flex;gap:4px;margin-bottom:6px;align-items:center;'
+    const redirectUriIn = $('input')
+    redirectUriIn.value = 'http://localhost:5199/auth/google/callback'
+    redirectUriIn.title = 'Google Cloud 控制台授权重定向 URI'
+    redirectUriIn.style.cssText = 'flex:1;box-sizing:border-box;padding:4px 7px;border-radius:6px;border:1px solid var(--dshp-line);background:transparent;color:inherit;font-size:11px;'
+    const copyUriBtn = $('button', 'dshp-btn', '📋 复制 URI')
+    copyUriBtn.title = '复制重定向 URI'
+    copyUriBtn.style.cssText = 'padding:4px 7px;font-size:11px;flex-shrink:0;'
+    copyUriBtn.addEventListener('click', async () => {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(redirectUriIn.value)
+        } else {
+          redirectUriIn.select()
+          document.execCommand('copy')
+        }
+        ui.bubble.show('重定向 URI 已复制！请在 Google 控制台中填入~', { name: '小胖次', ttl: 2500 })
+      } catch (_) {
+        redirectUriIn.select()
+        ui.bubble.show('请按 Cmd+C 复制选中地址~', { name: '小胖次', ttl: 2000 })
+      }
+    })
+    redirectRow.append(redirectUriIn, copyUriBtn)
+
+    const saveCredBtn = $('button', 'dshp-btn dshp-primary', '💾 保存 Google 客户端凭据')
+    saveCredBtn.style.cssText = 'width:100%;margin-top:2px;'
+    googleCredBox.append(credHint, clientIdRow, clientSecretRow, redirectHint, redirectRow, saveCredBtn)
+    googleSec.append(googleLoginInfo, googleLoginActions, googleCredBox)
+
+    // API Key 认证区域（支持任意模型平台：Gemini / DeepSeek / OpenAI / 自定义等）
+    const apiKeySec = $('div', null)
+    apiKeySec.style.cssText = 'margin:8px 0;padding-top:6px;border-top:1px dashed var(--dshp-line);'
+    const keyHint = $('div', 'dshp-hint', '通用 API 设置 (支持 Google Gemini / DeepSeek / OpenAI 等任意服务):')
+    keyHint.style.marginBottom = '6px'
+
+    // 常用平台快捷填充预设
+    const presetRow = $('div', 'dshp-row')
+    presetRow.style.cssText = 'gap:4px;margin-bottom:8px;flex-wrap:wrap;'
+    const mkPreset = (label, bUrl, mod) => {
+      const b = $('button', 'dshp-btn', label)
+      b.style.cssText = 'font-size:11px;padding:3px 8px;border-radius:6px;'
+      b.addEventListener('click', (e) => {
+        e.preventDefault()
+        baseInput.value = bUrl
+        modelInput.value = mod
+        ui.bubble.show(`已载入【${label}】预设~ 请填入对应 API 密钥`, { name: '小胖次', ttl: 1800 })
+      })
+      return b
+    }
+    presetRow.append(
+      mkPreset('⚡ Gemini 官方', 'https://generativelanguage.googleapis.com', 'gemini-3.5-flash-lite'),
+      mkPreset('🐳 DeepSeek 官方', 'https://api.deepseek.com', 'deepseek-chat'),
+      mkPreset('🤖 OpenAI 官方', 'https://api.openai.com/v1', 'gpt-4o-mini'),
+      mkPreset('⚙️ 自定义接口', '', '')
+    )
+
+    const keyRow = $('div', 'dshp-row')
+    keyRow.style.cssText = 'display:flex;gap:4px;margin-bottom:6px;align-items:center;'
+    const keyInput = $('input')
+    keyInput.type = 'password'
+    keyInput.placeholder = '输入对应平台的 API Key 密钥'
+    keyInput.style.cssText = 'flex:1;box-sizing:border-box;padding:5px 8px;border-radius:6px;border:1px solid var(--dshp-line);background:transparent;color:inherit;font-size:12px;'
+    const toggleEyeBtn = $('button', 'dshp-btn', '👁️')
+    toggleEyeBtn.title = '显示/隐藏密钥'
+    toggleEyeBtn.style.cssText = 'padding:4px 8px;font-size:12px;flex-shrink:0;'
+    toggleEyeBtn.addEventListener('click', () => {
+      keyInput.type = keyInput.type === 'password' ? 'text' : 'password'
+      toggleEyeBtn.textContent = keyInput.type === 'password' ? '👁️' : '🙈'
+    })
+    keyRow.append(keyInput, toggleEyeBtn, makePasteBtn(keyInput))
+
+    const baseRow = $('div', 'dshp-row')
+    baseRow.style.cssText = 'display:flex;gap:4px;margin-bottom:6px;align-items:center;'
+    const baseInput = $('input')
+    baseInput.type = 'text'
+    baseInput.placeholder = 'Base URL (如 https://api.deepseek.com 或 https://api.openai.com/v1)'
+    baseInput.style.cssText = 'flex:1;box-sizing:border-box;padding:5px 8px;border-radius:6px;border:1px solid var(--dshp-line);background:transparent;color:inherit;font-size:12px;'
+    baseRow.append(baseInput, makePasteBtn(baseInput))
+
+    const modelRow = $('div', 'dshp-row')
+    modelRow.style.cssText = 'display:flex;gap:4px;margin-bottom:8px;align-items:center;'
+    const modelInput = $('input')
+    modelInput.type = 'text'
+    modelInput.placeholder = '模型名称 (如 deepseek-chat, gpt-4o, gemini-3.5-flash-lite 等)'
+    modelInput.style.cssText = 'flex:1;box-sizing:border-box;padding:5px 8px;border-radius:6px;border:1px solid var(--dshp-line);background:transparent;color:inherit;font-size:12px;'
+    modelRow.append(modelInput, makePasteBtn(modelInput))
+
+    const saveKeyBtn = $('button', 'dshp-btn dshp-primary', '💾 保存并生效 API 配置')
+    saveKeyBtn.style.cssText = 'width:100%;'
+    saveKeyBtn.addEventListener('click', async () => {
+      const apiKey = keyInput.value.trim()
+      const baseUrl = baseInput.value.trim()
+      const model = modelInput.value.trim()
+      if (!apiKey) {
+        ui.bubble.show('请先输入有效的 API Key 密钥~', { name: '小胖次', ttl: 2200 })
+        keyInput.focus()
+        return
+      }
+      try {
+        saveKeyBtn.disabled = true
+        saveKeyBtn.textContent = '正在保存…'
+        const r = await fetch('/api/auth/apikey', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apiKey, baseUrl, model })
+        })
+        const j = await r.json()
+        if (j.ok) {
+          try {
+            localStorage.setItem('dsh_pet_apikey', apiKey)
+          } catch (_) {}
+          ui.bubble.show(`API 凭据配置成功！当前模型：${j.model || model || '已生效'}`, { name: '小胖次', ttl: 2500 })
+          refreshAuthUI()
+          if (typeof hudFetch === 'function') hudFetch(true)
+        } else {
+          ui.bubble.show('保存失败：' + (j.error || '未知错误'), { name: '小胖次', ttl: 2500 })
+        }
+      } catch (e) {
+        ui.bubble.show('保存失败：' + e.message, { name: '小胖次', ttl: 2500 })
+      } finally {
+        saveKeyBtn.disabled = false
+        saveKeyBtn.textContent = '💾 保存并生效 API 配置'
+      }
+    })
+
+    apiKeySec.append(keyHint, presetRow, keyRow, baseRow, modelRow, saveKeyBtn)
+
+    authBox.append(authTitle, authStatusText, modeSwitchRow, googleSec, apiKeySec)
+    box.append(authBox)
+
+    // 读取并渲染鉴权状态
+    const refreshAuthUI = async () => {
+      try {
+        const r = await fetch('/api/auth/status')
+        const st = await r.json()
+        const isOAuthMode = st.authType === 'oauth'
+        const isKeyMode = st.authType === 'apikey'
+
+        btnOAuthMode.classList.toggle('dshp-primary', isOAuthMode)
+        btnApiKeyMode.classList.toggle('dshp-primary', isKeyMode)
+
+        // 切换显示对应区域
+        if (isKeyMode) {
+          apiKeySec.style.display = 'block'
+          googleSec.style.display = 'none'
+        } else {
+          googleSec.style.display = 'block'
+          apiKeySec.style.display = 'none'
+        }
+
+        if (st.isGoogleLoggedIn) {
+          authStatusText.textContent = `✅ 当前模式：Google 账号认证 (${st.user ? st.user.email : '已登录'})`
+          googleLoginInfo.textContent = `✅ Google 账号已登录：${st.user ? st.user.email : '已登录'}`
+          googleLoginBtn.style.display = 'none'
+          googleLogoutBtn.style.display = 'inline-block'
+        } else {
+          authStatusText.textContent = isOAuthMode
+            ? (st.hasClientCredentials ? '🌐 Google 模式（凭据就绪，请点击登录）' : '⚠️ Google 模式（请先在下方填写凭据）')
+            : (st.hasApiKey ? `🔑 已生效 API Key (${st.apiKeyMasked})` : '⚪ 当前为本地待机模式')
+          googleLoginInfo.textContent = st.hasClientCredentials
+            ? '⚪ Google 客户端凭据已配置，可直接点击登录'
+            : '⚠️ 请先在下方配置 Client ID 与 Secret'
+          googleLoginBtn.style.display = 'inline-block'
+          googleLogoutBtn.style.display = 'none'
+        }
+
+        if (st.apiKeyRaw) {
+          keyInput.value = st.apiKeyRaw
+        } else {
+          try {
+            const cachedKey = localStorage.getItem('dsh_pet_apikey')
+            if (cachedKey && !keyInput.value) keyInput.value = cachedKey
+          } catch (e) {}
+        }
+        if (st.baseUrl) baseInput.value = st.baseUrl
+        fetch('/api/stats').then(r => r.json()).then(s => {
+          if (s && s.model && !modelInput.value) modelInput.value = s.model
+        }).catch(() => {})
+        if (st.clientIdRaw) clientIdIn.value = st.clientIdRaw
+        if (st.clientSecretRaw) clientSecretIn.value = st.clientSecretRaw
+        if (st.redirectUri) redirectUriIn.value = st.redirectUri
+      } catch (err) {
+        authStatusText.textContent = '读取鉴权状态失败：' + err.message
+      }
+    }
+    refreshAuthUI()
+
+    btnOAuthMode.addEventListener('click', async () => {
+      try {
+        await fetch('/api/auth/mode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'oauth' })
+        })
+        ui.bubble.show('已切换为【Google 账号认证】模式！', { name: '小胖次', ttl: 2200 })
+        refreshAuthUI()
+        hudFetch(true)
+      } catch (e) {
+        ui.bubble.show('切换模式失败：' + e.message, { name: '小胖次', ttl: 2200 })
+      }
+    })
+
+    btnApiKeyMode.addEventListener('click', async () => {
+      try {
+        await fetch('/api/auth/mode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'apikey' })
+        })
+        ui.bubble.show('已切换为【API Key 密钥】模式！', { name: '小胖次', ttl: 2200 })
+        refreshAuthUI()
+        hudFetch(true)
+      } catch (e) {
+        ui.bubble.show('切换模式失败：' + e.message, { name: '小胖次', ttl: 2200 })
+      }
+    })
+
+    googleLoginBtn.addEventListener('click', async () => {
+      if (!clientIdIn.value.trim()) {
+        ui.bubble.show('请先在下方输入 Google Client ID 并保存凭据哦~', { name: '小胖次', ttl: 2500 })
+        clientIdIn.focus()
+        return
+      }
+      try {
+        const r = await fetch('/api/auth/google/login')
+        const data = await r.json()
+        if (data.ok && data.authUrl) {
+          openExternal(data.authUrl)
+          ui.bubble.show('正在唤起浏览器进行 Google 授权登录，请在打开的页面中确认哦~', { name: '小胖次', ttl: 4500 })
+        } else {
+          ui.bubble.show('提示：' + (data.error || '未配置凭据'), { name: '小胖次', ttl: 3500 })
+        }
+      } catch (err) {
+        ui.bubble.show('唤起登录出错：' + err.message, { name: '小胖次', ttl: 2500 })
+      }
+    })
+
+    googleLogoutBtn.addEventListener('click', async () => {
+      try {
+        await fetch('/api/auth/logout', { method: 'POST' })
+        ui.bubble.show('已退出 Google 账号~', { name: '小胖次', ttl: 2200 })
+        refreshAuthUI()
+        hudFetch(true)
+      } catch (err) {
+        ui.bubble.show('退出登录出错：' + err.message, { name: '小胖次', ttl: 2200 })
+      }
+    })
+
+    saveKeyBtn.addEventListener('click', async () => {
+      const key = keyInput.value.trim()
+      const bUrl = baseInput.value.trim()
+      if (!key) {
+        ui.bubble.show('请输入 API Key 哦~', { name: '小胖次', ttl: 2000 })
+        keyInput.focus()
+        return
+      }
+      try {
+        await fetch('/api/auth/apikey', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apiKey: key, baseUrl: bUrl })
+        })
+        try { localStorage.setItem('dsh_pet_apikey', key) } catch (e) {}
+        keyInput.value = key
+        ui.bubble.show('API Key 配置成功并已生效！已切换为 API Key 模式~', { name: '小胖次', ttl: 2500 })
+        refreshAuthUI()
+        hudFetch(true)
+      } catch (err) {
+        ui.bubble.show('保存 API Key 失败：' + err.message, { name: '小胖次', ttl: 2200 })
+      }
+    })
+
+    saveCredBtn.addEventListener('click', async () => {
+      const cId = clientIdIn.value.trim()
+      const cSec = clientSecretIn.value.trim()
+      const rUri = redirectUriIn.value.trim()
+      if (!cId) {
+        ui.bubble.show('请输入 Google Client ID~', { name: '小胖次', ttl: 2000 })
+        clientIdIn.focus()
+        return
+      }
+      try {
+        await fetch('/api/auth/google/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientId: cId, clientSecret: cSec, redirectUri: rUri })
+        })
+        ui.bubble.show('Google 客户端凭据保存成功！现在可点击上方登录按钮啦~', { name: '小胖次', ttl: 3000 })
+        refreshAuthUI()
+      } catch (err) {
+        ui.bubble.show('保存凭据失败：' + err.message, { name: '小胖次', ttl: 2200 })
+      }
+    })
+
+    // Antigravity 控制与模式切换
+    const agyTitle = $('div', 'dshp-hint', '工作模式')
+    const agyModeRow = $('div', 'dshp-row')
+    const modes = [
+      ['chat', '陪伴闲聊'],
+      ['coder', '编码专家'],
+      ['agent', '智能体 Agent']
+    ]
+    for (const [mId, mLabel] of modes) {
+      const mb = $('button', 'dshp-btn', mLabel)
+      mb.addEventListener('click', async () => {
+        try {
+          await fetch('/api/mode', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: mId })
+          })
+          ui.bubble.show(`已切换至【${mLabel}】模式！`, { name: '小胖次', ttl: 2200 })
+          hudFetch(true)
+        } catch (e) {
+          ui.bubble.show('切换失败：' + e.message, { name: '小胖次', ttl: 2200 })
+        }
+      })
+      agyModeRow.appendChild(mb)
+    }
+
+    // 模型切换
+    const agyModelTitle = $('div', 'dshp-hint', '模型切换 (Antigravity)')
+    const agyModelRow = $('div', 'dshp-row')
+    const models = [
+      ['gemini-3.5-flash-lite', '⚡️ Gemini 3.5 Flash Lite', '极速轻量 · 首选推荐 (默认)'],
+      ['gemini-3.8-flash', '🚀 Gemini 3.8 Flash', '平衡性能 · 高响应速度'],
+      ['gemini-3.1-pro-preview', '🧠 Gemini 3.1 Pro Preview', '深度思考 · 复杂逻辑推理']
+    ]
+    for (const [modId, modLabel, modDesc] of models) {
+      const modBtn = $('button', 'dshp-btn', modLabel)
+      modBtn.title = modDesc
+      modBtn.dataset.model = modId
+      const curMod = (hud.data && hud.data.balance && hud.data.balance.currency) || (hud.data && hud.data.currency) || 'gemini-3.5-flash-lite'
+      if (curMod === modId) {
+        modBtn.classList.add('dshp-primary')
+      }
+      modBtn.addEventListener('click', async () => {
+        try {
+          await fetch('/api/model', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: modId })
+          })
+          for (const c of agyModelRow.children) c.classList.remove('dshp-primary')
+          modBtn.classList.add('dshp-primary')
+          ui.bubble.show(`模型已切换为【${modLabel}】！\n（${modDesc}）`, { name: '小胖次', ttl: 2500 })
+          hudFetch(true)
+        } catch (e) {
+          ui.bubble.show('切换模型失败：' + e.message, { name: '小胖次', ttl: 2200 })
+        }
+      })
+      agyModelRow.appendChild(modBtn)
+    }
+
+    const agyActionRow = $('div', 'dshp-row')
+    const clearCtxBtn = $('button', 'dshp-btn', '清空会话上下文')
+    clearCtxBtn.addEventListener('click', async () => {
+      try {
+        await fetch('/api/clear', { method: 'POST' })
+        ui.bubble.show('会话上下文已清空~ 我们重新开始吧！', { name: '小胖次', ttl: 2200 })
+        hudFetch(true)
+      } catch (e) {
+        ui.bubble.show('清空失败：' + e.message, { name: '小胖次', ttl: 2200 })
+      }
+    })
+    const stopTaskBtn = $('button', 'dshp-btn', '中断当前任务')
+    stopTaskBtn.addEventListener('click', async () => {
+      try {
+        await fetch('/api/cancel', { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json' } })
+        ui.bubble.show('任务已中断~', { name: '小胖次', ttl: 2200 })
+      } catch (e) {
+        ui.bubble.show('中断失败：' + e.message, { name: '小胖次', ttl: 2200 })
+      }
+    })
+    agyActionRow.append(clearCtxBtn, stopTaskBtn)
+    box.append(agyTitle, agyModeRow, agyModelTitle, agyModelRow, agyActionRow)
 
     const row2 = $('div', 'dshp-row')
     const reset = $('button', 'dshp-btn', '回到角落')
@@ -3853,7 +4789,7 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
       })
       const quitApp = $('button', 'dshp-btn', '彻底关闭桌宠应用')
       quitApp.addEventListener('click', () => {
-        ui.bubble.show('人家先退下了，想叫我就去「应用程序」里双击我～', { name: 'DS 鲸鱼娘', ttl: 2000 })
+        ui.bubble.show('人家先退下了，想叫我就去「应用程序」里双击我～', { name: '小胖次', ttl: 2000 })
         setTimeout(() => shell.post('quit'), 220)
       })
       row3.append(toBall, quitApp)
@@ -3956,16 +4892,20 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
         startWork()
         stopActing()
         setBase('thinking', WORK_PROPS)
-        ui.bubble.show(pick(SAY.start), { name: 'DS 鲸鱼娘', busy: true, sticky: true })
+
+        // 每次回复前，先弹出统计面板（展示当前第几轮对话及已消耗 Token），再给出对话回复
+        if (m.turn) {
+          hud.turn = Object.assign(hud.turn || {}, { seq: m.turn })
+          hud.seq = m.turn
+        }
+        openHud({ autoHideMs: 1800, flash: true })
         break
 
       case 'step-start':
         agent.step = m.step
         setStatus('thinking')
         rig.talking = false
-        if (!ui.bubble.visible) {
-          ui.bubble.show(pickFresh(SAY.thinking, 'thinking'), { name: 'DS 鲸鱼娘', busy: true, sticky: true })
-        } else {
+        if (ui.bubble.visible) {
           ui.bubble.note('正在思考 · 第 ' + m.step + ' 步')
         }
         break
@@ -3975,11 +4915,15 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
         agent.lastActivity = Date.now()
         if (!agent.hasStream) {
           agent.hasStream = true
+          // 开始打字机流式输出，平滑关闭 HUD 状态框，无缝展现对话回复气泡
+          closeHud()
           setStatus('speaking')
           rig.talking = true
           setBase('happy', WORK_PROPS)
-          ui.bubble.show('', { name: 'DS 鲸鱼娘', stream: true, sticky: true })
+          agent.lastText = ''
+          ui.bubble.show('', { name: '小胖次', stream: true, sticky: true })
         }
+        agent.lastText = (agent.lastText || '') + (m.text || '')
         ui.bubble.show(m.text || '', { stream: true, sticky: true })
         break
 
@@ -3990,7 +4934,7 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
         if (m.text) {
           setStatus('speaking')
           agent.lastText = m.text.slice(0, 4000)
-          ui.bubble.show(agent.lastText, { name: 'DS 鲸鱼娘', sticky: true })
+          ui.bubble.show(agent.lastText, { name: '小胖次', sticky: true })
         }
         if (m.usage) {
           const t = (m.usage.input || 0) + (m.usage.cache || 0) + (m.usage.output || 0)
@@ -4029,7 +4973,7 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
         const line = pickFresh(pool, 'tool-' + m.name)
         const hint = toolHint(m.args)
         ui.bubble.show(line + (hint ? '\n' + hint : ''), {
-          name: 'DS 鲸鱼娘',
+          name: '小胖次',
           busy: true,
           sticky: true,
         })
@@ -4065,7 +5009,7 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
           hud.seq = m.turn.seq || hud.seq
           if (!hud.data) hudFetch(false)
           else hudRender()
-          if (!hud.open) openHud({ autoHideMs: 9000, flash: true })
+          if (hud.open) openHud({ autoHideMs: 9000, flash: true })
         }
         break
       }
@@ -4082,25 +5026,24 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
         // （比如「调皮」会闭一只眼），于是看起来就像「平常动作被挤眼睛占住了」。
         setBase('neutral', IDLE_PROPS)
 
-        // 主人要的：每轮结束都把「本轮消耗」弹出来（独立面板，9 秒后自己收）。
-        // 宿主通常已经推了 hud-turn（那条会立刻弹）；这里只是兜底，晚一点再拉一次余额。
-        hudPopTurnEnd()
+        if (m.tokens || m.turn) {
+          hud.turn = Object.assign(hud.turn || {}, {
+            seq: m.turn || hud.seq,
+            tokens: m.tokens,
+            ts: Date.now()
+          })
+          hudFetch(false)
+        }
 
         const secs = m.ms ? (m.ms / 1000).toFixed(1) + 's' : ''
         const stat = []
+        if (m.turn || hud.seq) stat.push('第 ' + (m.turn || hud.seq) + ' 轮')
+        if (m.tokens) stat.push('本轮 ' + m.tokens.toLocaleString() + ' tokens')
         if (secs) stat.push(secs)
-        if (m.tokens) stat.push(m.tokens.toLocaleString() + ' tokens')
 
         if (kind === 'completed') {
-          // 庆祝：开心脸 + 伸个懒腰 + 一个装饰（猫耳/兔耳/花花随机一个）+ 一句台词。
-          // 刻意只叠「一个动作 + 一个装饰」，而且几秒后自己连开关一起收掉。
-          // 庆祝只做三件事：开心脸 + 一个装饰 + 一句台词，再加一个纯 CSS 的「蹦一下」。
-          // 刻意**不播 aidale**：那个「伸展」动作内部驱动 15 个表情参数
-          // （呆呆眼/哭/开心/晕晕/感叹号），一播就会同时点亮好几个表情，
-          // 看起来就是「砸完头之后表情全乱了」。qBounce 不碰任何模型参数。
           qBounce(1.2)
-          // 主人要求：刚输出的文字要**停留一下**，别被结算立刻顶掉。
-          // 所以先只做表情+装饰的庆祝，文字留在气泡里；过两秒多再把结束台词接上。
+          // 保持气泡中的模型回复，只更新附注 stat 并做轻量庆祝表情，不冲掉回复内容
           const keepText = ui.bubble.visible && !!agent.lastText
           act({
             mood: 'happy',
@@ -4108,12 +5051,8 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
             line: keepText ? null : pickFresh(SAY.done, 'done') + (stat.length ? '\n' + stat.join(' · ') : ''),
             ms: 3000,
           })
-          if (keepText) {
-            if (stat.length) ui.bubble.note(stat.join(' · '))
-            setTimeout(() => {
-              if (agent.status !== 'idle') return
-              ui.bubble.show(pickFresh(SAY.done, 'done'), { name: 'DS 鲸鱼娘', ttl: 4200 })
-            }, 2800)
+          if (keepText && stat.length) {
+            ui.bubble.note(stat.join(' · '))
           }
         } else if (kind === 'aborted') {
           act({ mood: 'sad', line: pickFresh(['诶…人家还没做完呢', '被打断了…'], 'abort'), ms: 2800 })
@@ -4173,7 +5112,7 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
     }
     if (m.motion) playMotion(m.motion)
     const text = m.say || m.bubble
-    if (text) ui.bubble.show(String(text), { name: 'DS 鲸鱼娘', ttl: m.bubbleMs || 5000 })
+    if (text) ui.bubble.show(String(text), { name: '小胖次', ttl: m.bubbleMs || 5000 })
     if (m.attention) {
       ui.root.classList.add('dshp-open')
       setTimeout(() => closePanels(), 3000)
@@ -4321,7 +5260,7 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
       if (idle.sleep === 0 && quiet > CFG.sleepAfterMs) {
         idle.sleep = 2
         setBase('sleepy', IDLE_PROPS)
-        ui.bubble.show(pick(['Zzz…', '（打瞌睡）', '（趴桌上睡着了）']), { name: 'DS 鲸鱼娘', ttl: 9000 })
+        ui.bubble.show(pick(['Zzz…', '（打瞌睡）', '（趴桌上睡着了）']), { name: '小胖次', ttl: 9000 })
       } else if (idle.sleep === 0 && quiet > CFG.sleepAfterMs * 0.55 && Math.random() < 0.4) {
         // 打哈欠
         act({ mood: 'sleepy', props: IDLE_PROPS, line: '（打了个哈欠）', ms: 2600 })

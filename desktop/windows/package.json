@@ -1,39 +1,55 @@
 {
-  "name": "dsh-whale-girl-pet-windows",
-  "productName": "DS-WhaleGirl-Pet",
-  "version": "0.1.0",
-  "description": "Windows 桌面外壳：把 DSH 里的鲸鱼娘桌宠放到桌面上（透明、置顶、点击穿透、贴边悬浮球）。她本身还是那份 DSH 插件，这里只是个窗口。",
+  "name": "antigravity-whale-girl-pet",
+  "productName": "Antigravity 鲸鱼娘桌宠",
+  "version": "1.0.0",
+  "description": "Antigravity 鲸鱼娘桌宠：基于 Live2D Cubism 的桌面伴侣助手",
   "main": "main.js",
   "author": "Andersen216",
   "license": "MIT",
   "private": true,
   "scripts": {
+    "sync": "node sync-resources.mjs",
     "start": "electron .",
-    "dist": "electron-builder --win --x64 --publish never"
+    "dist:win": "npm run sync && electron-builder --win --x64 --publish never",
+    "dist:mac": "npm run sync && electron-builder --mac --publish never",
+    "dist": "npm run sync && electron-builder -mw --publish never"
   },
   "devDependencies": {
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8"
   },
   "build": {
-    "appId": "com.andersen216.dsh.whalegirlpet",
-    "productName": "DS-WhaleGirl-Pet",
+    "appId": "com.google.antigravity.whalegirlpet",
+    "productName": "Antigravity 鲸鱼娘桌宠",
+    "directories": {
+      "output": "../../dist/installers"
+    },
+    "asar": false,
     "files": [
       "main.js",
       "preload.js",
+      "lib/**",
+      "assets/**",
+      "config.json",
       "build/**"
     ],
     "win": {
       "icon": "build/icon.png",
+      "signAndEditExecutable": false,
       "target": [
         {
           "target": "nsis",
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
         }
-      ],
-      "signAndEditExecutable": false
+      ]
     },
     "nsis": {
       "oneClick": false,
@@ -41,8 +57,44 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "DS 鲸鱼娘桌宠"
+      "shortcutName": "Antigravity 鲸鱼娘桌宠",
+      "artifactName": "Antigravity-WhaleGirl-Pet-Windows-Setup-v${version}.${ext}"
     },
-    "artifactName": "DS-WhaleGirl-Pet-Windows-Setup.${ext}"
+    "mac": {
+      "icon": "build/icon.png",
+      "category": "public.app-category.entertainment",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Antigravity-WhaleGirl-Pet-macOS-${arch}-v${version}.${ext}"
+    },
+    "dmg": {
+      "title": "Antigravity 鲸鱼娘桌宠 安装",
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
   }
 }

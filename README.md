@@ -1,63 +1,65 @@
 <div align="center">
 
+# 🐋 Antigravity 鲸鱼娘桌宠 · Whale Girl Live2D for Antigravity
 
-## 🚀 网页版一键部署（不用懂命令行）
+**Google Antigravity 的可视化桌面 AI 伴侣助手 —— 模型常驻桌面，联动 Agent 真实状态切换表情与动作。**
 
-DSH 网页版原来要自己装 Node、装 CLI、起服务、再装插件 —— 现在一条命令搞定：
-
-```bash
-# macOS / Linux / WSL：起网页版（自动挑空闲端口、自动打开浏览器）
-curl -fsSL https://raw.githubusercontent.com/Andersen216/dsh-whale-girl-live2d/main/tools/dsh-web-deploy.sh | bash
-
-# 想连桌宠插件一起装好
-curl -fsSL https://raw.githubusercontent.com/Andersen216/dsh-whale-girl-live2d/main/tools/dsh-web-deploy.sh | bash -s -- --with-pet
-```
-
-Windows：下载仓库里的 `tools/dsh-web-deploy.cmd` **双击运行**（内部走 PowerShell，
-已绕开执行策略；⚠️ 作者没有 Windows 机器，这版**尚未真机验证**）。
-
-**它做了什么**：检查 Node（≥20）→ 复用已装的 dsh（没有就用 `npm exec` 免安装跑）→
-用官方支持的 `--port 0` 让系统挑空闲端口 → 抓出带登录 token 的地址 → 自动开浏览器 →
-（可选）装桌宠插件。
-
-**子命令**：`--doctor` 只体检不起服务 · `stop` 停止 · `status` 看状态。
-状态记在 `~/.dsh/.web-deploy.json`（**只存 pid/端口/时间，不存 token**）。
-
-> 为什么不用现成的？调研了一圈（2026-10-03），社区 6 个「一键部署」项目**全是 Windows 专用**
-> （.cmd / PowerShell / WinForms），macOS/Linux 的 `curl | bash` 是空白；而且多数选择
-> 「下便携 Node + 拉源码 + 完整构建」这条 2–4GB 的重路径 —— 其实 `npm exec` 直接跑官方包即可。
-
-## 兼容性（重要）
-
-| 宿主 | 状态 |
-| --- | --- |
-| DSH **0.2.0-rc.1 / 0.2.0-rc.2**（官方桌面版当前版本） | ✅ **对齐的目标版本**，开发与验证都在这个版本上 |
-| DSH 0.2.x（后续版本） | 🔄 会持续跟进 |
-| DSH **0.1.x**（例如桌面版 0.1.7-rc.2） | ❌ **不支持** —— 会报 `failed to import` / `did not activate` |
-
-为什么老版本不行：宿主插件 API 在 0.1.x → 0.2.x 之间有过变动
-（举例：`connection.requestRejection` 在 0.1.0-rc.3 上不存在、0.1.5-rc.2 上才有）。
-本插件本身**只依赖 Node 内置模块**、没有任何第三方依赖，所以加载失败不是缺依赖，
-而是与老宿主的 API 不匹配。
-
-**遇到 `failed to import` 怎么办**：把官方桌面版 / DSH 升级到 **0.2.0-rc.x 或更新**，重装插件即可。
-
-# 🐋 鲸鱼娘桌宠 · Whale Girl Live2D
-
-**DSH（DeepSeek Harness）Web 界面里的 Live2D 桌宠 —— 她真的在跟着 agent 干活。**
-**A Live2D desktop pet for the DeepSeek Harness Web UI — she really does follow what the agent is doing.**
-
-[![Release](https://img.shields.io/github/v/release/Andersen216/dsh-whale-girl-live2d?label=release&color=2f81f7)](https://github.com/Andersen216/dsh-whale-girl-live2d/releases)
 [![Code: MIT](https://img.shields.io/badge/code-MIT-3fb950)](LICENSE)
 [![Artwork: CC BY-NC-SA 4.0](https://img.shields.io/badge/artwork-CC%20BY--NC--SA%204.0-d29922)](NOTICE.md)
-[![Non-commercial](https://img.shields.io/badge/use-non--commercial-e5534b)](NOTICE.md)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-8957e5)](#-安装--install)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Web-8957e5)](#-快速开始--quickstart)
 
-<img src="docs/screenshots/01-待机.jpg" alt="鲸鱼娘待在 DSH 界面右下角，左手笔右手本子" width="820">
+<img src="docs/screenshots/01-待机.jpg" alt="鲸鱼娘待在界面右下角，左手笔右手本子" width="820">
 
-点一下就能跟 agent 说话 · 右键就是钱包 · 表情 / 装饰 / 场景 / 动作 四页菜单 · 拖动换位置
+点一下就能跟 Antigravity 对话 · 右键呼出状态监视 · 表情 / 装饰 / 场景 / 动作 / 控制 多页菜单 · 桌面全透点击穿透
 
 </div>
+
+## 🚀 快速开始 / Quickstart
+
+### 1. 启动桌宠本地服务
+```bash
+# 复制环境变量配置
+cp .env.example .env
+
+# 启动服务（支持热重载）
+npm run dev
+# 或直接启动
+npm start
+```
+- 网页预览：打开浏览器访问 [http://127.0.0.1:5199/](http://127.0.0.1:5199/)
+- 桌面独立页面：[http://127.0.0.1:5199/standalone](http://127.0.0.1:5199/standalone)
+
+### 2. 下载安装包（Windows & macOS）
+前往 [Releases](https://github.com/Andersen216/dsh-whale-girl-live2d/releases) 下载对应系统的安装包：
+- **Windows 用户**：下载 `Antigravity-WhaleGirl-Pet-Windows-Setup-v1.0.0.exe`（安装向导，自动创建桌面快捷方式）或 `Antigravity-WhaleGirl-Pet-Windows-v1.0.0.zip`（免安装便携版）。
+- **macOS 用户**：
+  - Apple Silicon (M系列芯片)：下载 `Antigravity-WhaleGirl-Pet-macOS-arm64-v1.0.0.dmg`（拖拽即可安装）。
+  - Intel 芯片：下载 `Antigravity-WhaleGirl-Pet-macOS-x64-v1.0.0.dmg`。
+  - 原生 Swift 轻量版：`Antigravity-WhaleGirl-Pet-macOS-Native.zip`。
+
+### 3. 本地打包构建命令
+```bash
+# 打包 Windows 安装包 (.exe 安装向导 + .zip 免安装包)
+npm run build:win
+
+# 打包 macOS 安装包 (.dmg 镜像 + .zip 独立包)
+npm run build:mac
+
+# 编译 macOS 原生极简 Swift 壳 (1.5MB)
+npm run build:desktop
+```
+
+---
+
+## ⚙️ 配置说明 (.env / config.json)
+
+在 `.env` 或 `config.json` 中配置：
+- `ANTIGRAVITY_BASE_URL`：Antigravity 或 Gemini API 端点地址
+- `ANTIGRAVITY_API_KEY`：API 密钥（未配置时自动进入本地模拟模式，开箱即用）
+- `MODEL_NAME`：模型名称（默认 `gemini-3.5-flash-lite`，可选 `gemini-3.5-flash-lite` / `gemini-3.8-flash` / `gemini-3.1-pro-preview`）
+- `PORT`：本地服务端口（默认 `5199`）
+
+---
 
 ---
 

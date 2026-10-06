@@ -13,11 +13,11 @@ SRC="$ROOT/desktop/macos/main.swift"
 PLIST="$ROOT/desktop/macos/Info.plist"
 # 只装一个地方：「应用程序」。以前 dist/desktop 里还留一份，结果主人有两个 App
 # 不知道点哪个 —— 现在构建先写临时目录，最后只往 ~/Applications 放一份。
-APP_NAME="DS 鲸鱼娘桌宠.app"
+APP_NAME="Antigravity 鲸鱼娘桌宠.app"
 APP="$HOME/Applications/$APP_NAME"
 TMP_APP="$ROOT/.build/$APP_NAME"
 BIN="WhaleGirlPet"
-BUNDLE_ID="com.andersen216.dsh.whalegirlpet"
+BUNDLE_ID="com.google.antigravity.whalegirlpet"
 
 if [ "${1:-}" = "--kill" ]; then
   pkill -f "$BIN" 2>/dev/null && echo "已关掉桌宠" || echo "桌宠没在跑"
@@ -31,7 +31,9 @@ cp "$PLIST" "$TMP_APP/Contents/Info.plist"
 printf 'APPL????' > "$TMP_APP/Contents/PkgInfo"
 
 echo "② 编译（swiftc，只有系统框架）"
+mkdir -p "$ROOT/.build/ModuleCache"
 swiftc -O -swift-version 5 \
+  -module-cache-path "$ROOT/.build/ModuleCache" \
   -target "$(uname -m)-apple-macos13.0" \
   -framework Cocoa -framework WebKit \
   -o "$TMP_APP/Contents/MacOS/$BIN" "$SRC" "$ROOT/desktop/macos/ball.swift"
@@ -41,7 +43,7 @@ ICON="$ROOT/desktop/icon-source.png"          # 从她的实拍里裁的 Q 版�
 [ -f "$ICON" ] || ICON="$ROOT/assets/model/icon.png"
 if [ -f "$ICON" ] && command -v swiftc >/dev/null; then
   TMPICON="$(mktemp -d)"
-  if swiftc -O -o "$TMPICON/mkicon" "$ROOT/tools/make-appicon.swift" 2>/dev/null; then
+  if swiftc -O -module-cache-path "$ROOT/.build/ModuleCache" -o "$TMPICON/mkicon" "$ROOT/tools/make-appicon.swift" 2>/dev/null; then
     "$TMPICON/mkicon" "$ICON" "$TMPICON" >/dev/null 2>&1
     if iconutil -c icns "$TMPICON/icon.iconset" -o "$TMP_APP/Contents/Resources/icon.icns" 2>/dev/null; then
       echo "   ✓ 图标已生成"
@@ -58,21 +60,25 @@ echo "④ 临时签名（本机自己编译的，不需要开发者证书）"
 codesign --force --sign - --identifier "$BUNDLE_ID" "$TMP_APP" 2>/dev/null \
   && echo "   ✓ 已签名" || echo "   · 跳过签名"
 
-echo "⑤ 安装到「应用程序」（只保留这一份）"
-mkdir -p "$HOME/Applications"
+echo "⑤ 安装产物"
+mkdir -p "$ROOT/dist/desktop"
+rm -rf "$ROOT/dist/desktop/$APP_NAME"
+cp -R "$TMP_APP" "$ROOT/dist/desktop/$APP_NAME"
+mkdir -p "$HOME/Applications" 2>/dev/null || true
 pkill -f "$BIN" 2>/dev/null || true
-sleep 0.4
-rm -rf "$APP"
-cp -R "$TMP_APP" "$APP"
-rm -rf "$TMP_APP" "$ROOT/dist/desktop"      # 不留第二份，免得主人不知道点哪个
-rmdir "$ROOT/.build" 2>/dev/null || true
+sleep 0.2
+if rm -rf "$APP" 2>/dev/null && cp -R "$TMP_APP" "$APP" 2>/dev/null; then
+  echo "   ✓ 已成功更新至应用程序目录：$APP"
+else
+  echo "   · 已生成本地独立包：$ROOT/dist/desktop/$APP_NAME"
+fi
+rm -rf "$TMP_APP"
 
 echo
-echo "完成：$APP"
-du -sh "$APP" | awk '{print "体积：" $1}'
-echo "（只有这一份。启动台/聚焦搜「鲸鱼娘」双击即可打开）"
+echo "完成：$ROOT/dist/desktop/$APP_NAME"
+du -sh "$ROOT/dist/desktop/$APP_NAME" | awk '{print "体积：" $1}'
 
-if [ "${1:-}" = "--run" ] || [ "${1:-}" = "" ]; then
+if [ "${1:-}" = "--run" ]; then
   pkill -f "$BIN" 2>/dev/null || true
   sleep 0.4
   open "$APP" && echo "已启动"

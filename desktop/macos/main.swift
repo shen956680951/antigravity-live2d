@@ -15,28 +15,22 @@
 import Cocoa
 import WebKit
 
-/// 宿主地址在启动时「发现」出来，不再写死 ——
-/// 官方桌面版（Electron App，端口由它自己挑，实测 19387）和手动起的 `dsh web`（3080）
-/// 都能连上。插件侧不用做任何改动。
-var deskBase: String = "http://127.0.0.1:19387"
+/// Antigravity 桌宠宿主地址（默认端口 5199）
+var deskBase: String = "http://127.0.0.1:5199"
 var petURL: String { deskBase + "/dsh-pet/standalone" }
 // 窗口必须比「她 + 四周面板」大：说话框 370 宽、设置面板 393×471，
-// 窗口太小时面板会被窗口本身裁掉（主人看到的「只剩一个角」就是这个原因）。
-// 多出来的区域是透明的、而且点击穿透 —— 不影响你操作别的窗口。
-// 窗口只留「够用」的大小：菜单面板 393×471、聊天框 370 宽，
-// 加上她本人大约 200px 高，再留点余量 → 460×700 足够。
-// 实测：透明窗口的面积越小，WindowServer 合成它就越省
-//（鼠标连续移动时 WindowServer 66~79%，透明面积是它的直接成本）。
+// 窗口太小时面板会被窗口本身裁掉。
+// 460×700 足够。
 let WIN_W: CGFloat = 460
 let WIN_H: CGFloat = 700
 let K_X = "pet.win.x", K_Y = "pet.win.y", K_TOP = "pet.win.top", K_LOW = "perf.low"
 
-/// 插件资源目录：优先用「装进 profile 的那份」，找不到再按 App 包相对位置找，
-/// 这样不管 App 放在 dist/ 还是被拷到「应用程序」里都能定位到图标。
+/// 插件资源目录
 let assetsPath: String = {
-    let profile = NSHomeDirectory() + "/.dsh/profiles/web/node_modules/dsh-whale-girl-live2d/assets"
-    if FileManager.default.fileExists(atPath: profile) { return profile }
     let rel = Bundle.main.bundlePath + "/../../../../assets"
+    if FileManager.default.fileExists(atPath: (rel as NSString).standardizingPath) {
+        return (rel as NSString).standardizingPath
+    }
     return (rel as NSString).standardizingPath
 }()
 
@@ -47,17 +41,42 @@ final class PetWindow: NSWindow {
     override var canBecomeMain: Bool { true }
 
     /// 拆掉 macOS 的「空气墙」。
-    ///
-    /// AppKit 默认会把窗口约束在屏幕内（不让顶部顶到菜单栏上面），对普通窗口是对的，
-    /// 但桌宠是无边框、本来就该能拖到任何地方（包括半出屏）的窗口。
-    /// 日志证据：拖动时窗口 y 每次都停在 150 —— 150 + 900(窗口高) = 1050 = 屏幕可用区顶边，
-    /// 就是这条默认约束在拦。覆写成原样返回即可。
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
         return frameRect
     }
+
+    /// 保证 Cmd+C / Cmd+V / Cmd+X / Cmd+A / Cmd+Z 快捷键在 WKWebView 与输入框中生效
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.modifierFlags.contains(.command) {
+            let chars = event.charactersIgnoringModifiers?.lowercased()
+            if chars == "v" {
+                if NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: self) {
+                    return true
+                }
+            } else if chars == "c" {
+                if NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: self) {
+                    return true
+                }
+            } else if chars == "x" {
+                if NSApp.sendAction(#selector(NSText.cut(_:)), to: nil, from: self) {
+                    return true
+                }
+            } else if chars == "a" {
+                if NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: self) {
+                    return true
+                }
+            } else if chars == "z" {
+                let sel = event.modifierFlags.contains(.shift) ? Selector(("redo:")) : Selector(("undo:"))
+                if NSApp.sendAction(sel, to: nil, from: self) {
+                    return true
+                }
+            }
+        }
+        return super.performKeyEquivalent(with: event)
+    }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScriptMessageHandler {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScriptMessageHandler, WKUIDelegate {
     var win: NSWindow!
     var web: WKWebView!
     var status: NSStatusItem!
@@ -91,13 +110,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     // MARK: - 启动
 
+    func setupEditMenu() {
+        let mainMenu = NSMenu()
+        let editMenuItem = NSMenuItem()
+        mainMenu.addItem(editMenuItem)
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(withTitle: "撤销", action: Selector(("undo:")), keyEquivalent: "z")
+        let redoItem = NSMenuItem(title: "重做", action: Selector(("redo:")), keyEquivalent: "Z")
+        redoItem.keyEquivalentModifierMask = [.command, .shift]
+        editMenu.addItem(redoItem)
+        editMenu.addItem(NSMenuItem.separator())
+        editMenu.addItem(withTitle: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "复制", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editMenuItem.submenu = editMenu
+        NSApp.mainMenu = mainMenu
+    }
+
     func applicationDidFinishLaunching(_ note: Notification) {
         NSApp.setActivationPolicy(.accessory)   // 不占 Dock、不抢焦点
+        setupEditMenu()
         // 关键：别让 macOS 把「没人操作的透明窗口」判成 App Nap 而掐掉 requestAnimationFrame。
         // 被掐的症状极隐蔽：页面不报错、模型数据也加载了，但 rAF 永不触发 →
         // 前端启动流程停在「等一帧」那一步，于是既画不出她、也连不上事件流。
-        // 日志超过 2MB 就滚掉，别让它无限长大
-        let logPath = NSHomeDirectory() + "/.dsh/whalegirlpet.log"
+        let antigravityDir = NSHomeDirectory() + "/.antigravity"
+        try? FileManager.default.createDirectory(atPath: antigravityDir, withIntermediateDirectories: true)
+        let logPath = antigravityDir + "/whalegirlpet.log"
         if let attrs = try? FileManager.default.attributesOfItem(atPath: logPath),
            let size = attrs[.size] as? Int, size > 2_000_000 {
             try? FileManager.default.removeItem(atPath: logPath)
@@ -212,6 +251,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         web = WKWebView(frame: win.contentView!.bounds, configuration: cfg)
         web.autoresizingMask = [.width, .height]
         web.navigationDelegate = self
+        web.uiDelegate = self
         // 透明背景：三管齐下（WKWebView 的 drawsBackground 是私有键，先确认存在再设，避免崩）
         // 关掉 WKWebView 自己的白底。
         // 坑：老写法查的是 setDrawsBackground:，但那是私有属性 —— 运行时真名是
@@ -244,7 +284,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     func makeStatusItem() {
         status = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         status.button?.title = "🐋"          // 菜单栏上的入口：没有它这个窗口就关不掉了
-        status.button?.toolTip = "DS 鲸鱼娘桌宠"
+        status.button?.toolTip = "Antigravity 鲸鱼娘桌宠"
         let m = NSMenu()
         m.addItem(withTitle: "重新加载", action: #selector(reload), keyEquivalent: "r")
         m.addItem(withTitle: "回到右下角（连她的位置一起归位）", action: #selector(resetPetPosition), keyEquivalent: "")
@@ -475,7 +515,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     /// 候选宿主：① 正在监听的「像 DSH 的」进程（官方桌面版 / dsh web）② 常见端口兜底
     /// 通行证文件里记录的宿主端口（插件写进去的，因机器而异 —— 不能写死）
     func deskPort() -> Int? {
-        let p = NSHomeDirectory() + "/.dsh/dsh-live2d-pet-desktop.json"
+        let p = NSHomeDirectory() + "/.antigravity/antigravity-live2d-pet-desktop.json"
         guard let d = FileManager.default.contents(atPath: p),
               let o = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any],
               let n = o["port"] as? Int, n > 0, n < 65536
@@ -508,12 +548,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 }
             }
         }
-        ports += [19387, 3080, 8080, 3000]   // 兜底：官方桌面版实测端口 + 常用 web 端口
+        ports += [5199, 19387, 3080, 8080, 3000]   // Antigravity 默认端口 5199 在前
         var seen = Set<Int>()
         return ports.filter { seen.insert($0).inserted }.map { "http://127.0.0.1:\($0)" }
     }
 
-    /// 探一下某个宿主：200 = 就是它且票有效；401 = 插件在但票不对；其它 = 不是它
+    /// 探一下某个宿主：200 = 成功响应；其它 = 不是它
     func probeHost(_ base: String, token: String) -> Int {
         guard let u = URL(string: base + "/dsh-pet/pet.js") else { return -1 }
         var req = URLRequest(url: u)
@@ -530,18 +570,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     func load() {
-        guard let token = deskToken() else {
-            log("还没拿到本地通行证（~/.dsh/dsh-live2d-pet-desktop.json）—— 插件可能还是旧版，5 秒后重试")
-            retry(after: 5)
-            return
-        }
+        let token = deskToken() ?? "antigravity-token"
         DispatchQueue.global().async { [weak self] in
             guard let self else { return }
             var fallback: String?
             for base in self.candidateBases() {
                 let code = self.probeHost(base, token: token)
                 if code == 200 {
-                    self.log("找到宿主（票有效）: \(base)")
+                    self.log("找到 Antigravity 宿主服务: \(base)")
                     DispatchQueue.main.async { self.start(base: base, token: token) }
                     return
                 }
@@ -549,11 +585,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             }
             DispatchQueue.main.async {
                 if let fb = fallback {
-                    self.log("找到宿主（票可能过期，先进去看）: \(fb)")
+                    self.log("找到宿主服务: \(fb)")
                     self.start(base: fb, token: token)
                 } else {
-                    self.showHint("没找到正在运行的 DSH —— 官方桌面版和 `dsh web` 都试过了。请先打开其中一个。")
-                    self.retry(after: 5)
+                    self.showHint("正在连接 Antigravity 桌宠服务 (http://127.0.0.1:5199)... 请先启动 npm run dev 或 npm start")
+                    self.retry(after: 3)
                 }
             }
         }
@@ -563,8 +599,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     func start(base: String, token: String) {
         deskBase = base
         guard let u = URL(string: petURL) else { return }
-        // 把通行证写成 cookie：之后页面里的 pet.js、SSE、控制接口都会自动带上它，
-        // 不用改前端任何一行。
+        // 把通行证写成 cookie
         let props: [HTTPCookiePropertyKey: Any] = [
             .name: "dsh_pet_desk", .value: token, .domain: "127.0.0.1", .path: "/",
         ]
@@ -579,14 +614,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
     }
 
-    /// 读插件写的通行证文件（插件每次启动会确保它在）
+    /// 读通行证（Antigravity 模式默认免密放行）
     func deskToken() -> String? {
-        let p = NSHomeDirectory() + "/.dsh/dsh-live2d-pet-desktop.json"
-        guard let d = FileManager.default.contents(atPath: p),
-              let o = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any],
-              let t = o["token"] as? String, t.count >= 16
-        else { return nil }
-        return t
+        let p = NSHomeDirectory() + "/.antigravity/antigravity-live2d-pet-desktop.json"
+        if let d = FileManager.default.contents(atPath: p),
+           let o = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any],
+           let t = o["token"] as? String, t.count >= 16 {
+            return t
+        }
+        return "antigravity-token"
     }
 
     func webView(_ w: WKWebView, didFinish navigation: WKNavigation!) {
@@ -632,21 +668,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         // 页面又会回一条 "shown" —— 没有守卫就是无限递归：
         // 日志里出现过 **5472 万条「已展开桌宠」**，CPU 打满、收起按钮完全失效。
         // 规矩：只在「状态确实需要改变」时才动。
-        switch String(describing: message.body) {
+        let bodyStr = String(describing: message.body)
+        switch bodyStr {
         case "hidden", "collapse":
             guard win.isVisible else { return }          // 已经是收起态 → 忽略
             collapseToBall()
         case "shown", "expand":
             guard ball?.isVisible == true else { return } // 已经是展开态 → 忽略
             expandFromBall()
-        case "open-dsh":
-            // 前端那个 ↗ 符号：用默认浏览器打开 DeepSeek Harness 界面
+        case "open-web", "open-dsh":
+            // 用默认浏览器打开 Antigravity 界面
             if let u = URL(string: deskBase + "/") { NSWorkspace.shared.open(u) }
-            log("已用浏览器打开 DSH 界面（\(deskBase)）")
+            log("已用浏览器打开 Antigravity 界面（\(deskBase)）")
         case "quit":
             quitNow()
         default:
-            log("壳子收到未知指令：\(message.body)")
+            if bodyStr.hasPrefix("open-url:") {
+                let raw = String(bodyStr.dropFirst("open-url:".count)).trimmingCharacters(in: .whitespaces)
+                if let u = URL(string: raw) {
+                    NSWorkspace.shared.open(u)
+                    log("已用系统浏览器打开: \(raw)")
+                }
+            } else {
+                log("壳子收到未知指令：\(message.body)")
+            }
         }
     }
 
@@ -657,8 +702,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         NSApp.terminate(nil)
     }
 
-    /// 存一张她现在的样子到 ~/.dsh/whalegirlpet-shot.png
-    /// （透明窗口没法用系统截图工具抓，只能从 WebView 里自己拍；做 UI 时用它看效果）
+    /// 存一张她现在的样子到 ~/.antigravity/whalegirlpet-shot.png
     @objc func saveShot() {
         web.takeSnapshot(with: WKSnapshotConfiguration()) { [weak self] img, err in
             guard let self else { return }
@@ -668,7 +712,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 self.log("截图失败：\(err?.localizedDescription ?? "未知原因")")
                 return
             }
-            let path = NSHomeDirectory() + "/.dsh/whalegirlpet-shot.png"
+            let path = NSHomeDirectory() + "/.antigravity/whalegirlpet-shot.png"
             do {
                 try png.write(to: URL(fileURLWithPath: path))
                 self.log("已保存截图：\(path)（\(rep.pixelsWide)×\(rep.pixelsHigh)）")
@@ -776,6 +820,67 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             return
         }
         decisionHandler(.allow)
+    }
+
+    /// 拦截网页中的外链点击与跳转，统一用 macOS 默认系统浏览器打开，避免在透明桌宠壳内跳转
+    func webView(_ w: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        if let u = navigationAction.request.url {
+            let s = u.absoluteString
+            if navigationAction.navigationType == .linkActivated || (!s.hasPrefix("http://127.0.0.1") && !s.hasPrefix("http://localhost")) {
+                NSWorkspace.shared.open(u)
+                decisionHandler(.cancel)
+                return
+            }
+        }
+        decisionHandler(.allow)
+    }
+
+    // MARK: - WKUIDelegate 弹窗与系统浏览器窗口跳转
+
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
+                 for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if let url = navigationAction.request.url {
+            NSWorkspace.shared.open(url)
+        }
+        return nil
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,
+                 initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
+        let alert = NSAlert()
+        alert.messageText = "小胖次提示"
+        alert.informativeText = message
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "好的")
+        alert.runModal()
+        completionHandler()
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,
+                 initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
+        let alert = NSAlert()
+        alert.messageText = "小胖次确认"
+        alert.informativeText = message
+        alert.addButton(withTitle: "确定")
+        alert.addButton(withTitle: "取消")
+        let res = alert.runModal()
+        completionHandler(res == .alertFirstButtonReturn)
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String,
+                 defaultText: String?, initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping (String?) -> Void) {
+        let alert = NSAlert()
+        alert.messageText = "小胖次"
+        alert.informativeText = prompt
+        alert.addButton(withTitle: "确定")
+        alert.addButton(withTitle: "取消")
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        input.stringValue = defaultText ?? ""
+        alert.accessoryView = input
+        let res = alert.runModal()
+        completionHandler(res == .alertFirstButtonReturn ? input.stringValue : nil)
     }
 
     /// 让她「可见时满速、不可见时让系统降频」。
@@ -905,7 +1010,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         lastLogAt = now
         let line = "[\(now.formatted(date: .omitted, time: .standard))] \(s)\n"
         FileHandle.standardError.write(line.data(using: .utf8)!)
-        let path = NSHomeDirectory() + "/.dsh/whalegirlpet.log"
+        let path = NSHomeDirectory() + "/.antigravity/whalegirlpet.log"
         if let h = FileHandle(forWritingAtPath: path) {
             h.seekToEndOfFile(); h.write(line.data(using: .utf8)!); try? h.close()
         } else {
@@ -913,7 +1018,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
     }
 
-    /// DSH 没起来时给一张可读的提示页（透明窗口里一片空白，用户不知道发生了什么）
+    /// Antigravity 服务未就绪时的提示页
     func showHint(_ detail: String) {
         let html = """
         <!doctype html><meta charset="utf-8"><style>
@@ -925,14 +1030,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         .t{font-weight:600;margin-bottom:6px;font-size:14px}
         .s{opacity:.72;font-size:12px}
         </style><body><div class="box">
-        <div class="t">🐋 正在找 DSH…</div>
+        <div class="t">🐋 正在连接 Antigravity…</div>
         <div class="s">\(detail)</div></div></body>
         """
         web.loadHTMLString(html, baseURL: nil)
     }
 
-    /// DSH 还没启动 / 正在重启时不至于一片空白：过几秒自己再试
-    func retry(after seconds: Double = 5) {
+    /// 服务未启动时定时重试
+    func retry(after seconds: Double = 3) {
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in self?.load() }
     }
 
@@ -1006,7 +1111,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     @objc func openHome() {
-        NSWorkspace.shared.open(URL(fileURLWithPath: NSHomeDirectory() + "/.dsh"))
+        let dir = NSHomeDirectory() + "/.antigravity"
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(URL(fileURLWithPath: dir))
     }
 
     @objc func quit() { NSApp.terminate(nil) }

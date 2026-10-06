@@ -6,3 +6,7 @@ node_modules/
 /test-output/
 backups/
 dist/
+.env
+.auth.json
+.history.json
+.build/

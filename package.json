@@ -1,11 +1,10 @@
 {
-  "name": "dsh-whale-girl-live2d",
-  "version": "0.4.6",
-  "description": "鲸鱼娘桌宠：把 Live2D 鲸鱼娘挂进 DSH Web 界面的桌宠插件——模型常驻桌面，跟着 agent 的真实状态换表情与动作，点一下就能直接跟 agent 说话，右键菜单可换表情 / 换装 / 摆场景 / 演小动作。（Whale Girl Pet: a Live2D companion for the DeepSeek Harness Web UI. Model assets are non-commercial, CC BY-NC-SA 4.0.）",
+  "name": "antigravity-whale-girl-live2d",
+  "version": "1.0.0",
+  "description": "Antigravity 鲸鱼娘：基于 Live2D Cubism 的 Antigravity 可视化桌面伴侣助手。模型常驻桌面，联动 Antigravity 状态换表情与动作，支持流式对话与打字机唇形同步。",
   "keywords": [
-    "dsh",
-    "dsh-plugin",
-    "deepseek-harness",
+    "antigravity",
+    "gemini",
     "live2d",
     "cubism",
     "desktop-pet",
@@ -18,40 +17,21 @@
   "files": [
     "lib",
     "assets",
-    "docs",
-    "skill",
-    "cordis.patch.yml",
+    "desktop",
+    "config.json",
     "README.md",
-    "CHANGELOG.md",
-    "AUTHORS.md",
-    "PROVENANCE.md",
-    "NOTICE.md",
     "LICENSE"
   ],
-  "bin": {
-    "dsh-pet": "tools/pet-ctl.mjs"
-  },
   "scripts": {
+    "start": "node lib/server.js",
+    "dev": "node --watch lib/server.js",
+    "build:desktop": "bash tools/build-desktop-mac.sh",
+    "build:win": "npm --prefix desktop/windows run dist:win",
+    "build:mac": "npm --prefix desktop/windows run dist:mac",
+    "build:installers": "npm --prefix desktop/windows run dist",
     "build:model": "node tools/build-model.mjs",
     "preview": "node tools/preview-server.mjs",
-    "test": "node tools/test-host.mjs",
-    "smoke": "node tools/smoke.mjs",
-    "shot": "node tools/shot.mjs",
-    "test:e2e": "node tools/e2e.mjs",
-    "test:agent": "node tools/e2e-agent.mjs",
-    "ascii": "node tools/ascii.mjs",
-    "test:e2e:ui": "node tools/ui-probe.mjs",
-    "test:catalog": "node tools/catalog-test.mjs",
-    "repro:stuck": "node tools/repro-stuck.mjs",
-    "release:check": "node tools/publish.mjs --check",
-    "release:github": "node tools/publish.mjs",
-    "release:npm": "node tools/publish-npm.mjs",
-    "release:npm:check": "node tools/publish-npm.mjs --check"
-  },
-  "dsh": {
-    "bundle": {
-      "patch": "./cordis.patch.yml"
-    }
+    "test": "node test/integration.test.mjs"
   },
   "license": "MIT",
   "author": {
