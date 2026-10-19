@@ -46,8 +46,8 @@ window.addEventListener(
     if (isPanel) return
 
     dragSession = {
-      startX: e.screenX,
-      startY: e.screenY,
+      startX: Math.round(Number(e.screenX) || 0),
+      startY: Math.round(Number(e.screenY) || 0),
       pointerId: e.pointerId,
       target: target,
       started: false,
@@ -60,8 +60,10 @@ window.addEventListener(
   'pointermove',
   (e) => {
     if (!dragSession) return
-    const dx = e.screenX - dragSession.startX
-    const dy = e.screenY - dragSession.startY
+    const curX = Math.round(Number(e.screenX) || 0)
+    const curY = Math.round(Number(e.screenY) || 0)
+    const dx = curX - dragSession.startX
+    const dy = curY - dragSession.startY
     if (!dragSession.started && Math.abs(dx) + Math.abs(dy) > 4) {
       dragSession.started = true
       try {

@@ -1,7 +1,7 @@
 {
   "name": "antigravity-whale-girl-pet",
   "productName": "Antigravity 鲸鱼娘桌宠",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Antigravity 鲸鱼娘桌宠：基于 Live2D Cubism 的桌面伴侣助手",
   "main": "main.js",
   "author": "Andersen216",
@@ -11,7 +11,7 @@
     "sync": "node sync-resources.mjs",
     "start": "electron .",
     "dist:win": "npm run sync && electron-builder --win --x64 --publish never",
-    "dist:mac": "npm run sync && electron-builder --mac --publish never",
+    "dist:mac": "npm run sync && electron-builder --mac dmg --arm64 --publish never && electron-builder --mac dmg --x64 --publish never",
     "dist": "npm run sync && electron-builder -mw --publish never"
   },
   "devDependencies": {

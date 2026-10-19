@@ -14,6 +14,23 @@ const path = require('node:path')
 // 优化 Windows 透明窗口渲染稳定性
 app.commandLine.appendSwitch('disable-gpu-sandbox')
 
+process.on('uncaughtException', (err) => {
+  console.error('[Desktop] 主进程未捕获异常:', err)
+})
+
+function safeSetWindowPos(targetWin, x, y) {
+  if (!targetWin || targetWin.isDestroyed()) return
+  const ix = Math.round(Number(x))
+  const iy = Math.round(Number(y))
+  if (Number.isFinite(ix) && Number.isFinite(iy)) {
+    try {
+      targetWin.setPosition(ix, iy)
+    } catch (err) {
+      console.warn('[Desktop] setPosition 转换异常:', err.message)
+    }
+  }
+}
+
 const CANDIDATE_BASES = [
   'http://127.0.0.1:5199',
   'http://127.0.0.1:3080',
@@ -113,11 +130,16 @@ const hitJS = (x, y) => `(function(){try{
 
 function setIgnore(on) {
   if (!win || win.isDestroyed()) return
-  if (on) {
-    win.setIgnoreMouseEvents(true, { forward: true })
-  } else {
-    // 关键：取消穿透时严禁带 { forward: true }，否则 Windows 上无法响应点击
-    win.setIgnoreMouseEvents(false)
+  try {
+    if (on) {
+      win.setIgnoreMouseEvents(true, { forward: true })
+    } else {
+      win.setIgnoreMouseEvents(false)
+    }
+  } catch (e) {
+    try {
+      win.setIgnoreMouseEvents(!!on)
+    } catch (_) {}
   }
 }
 
@@ -167,7 +189,9 @@ function createMain() {
 
   const wa = screen.getPrimaryDisplay().workArea
   const saved = readPos()
-  win.setPosition(saved ? saved[0] : wa.x + wa.width - WIN_W - 16, saved ? saved[1] : wa.y + wa.height - WIN_H - 16)
+  const defX = Math.round(wa.x + wa.width - WIN_W - 16)
+  const defY = Math.round(wa.y + wa.height - WIN_H - 16)
+  safeSetWindowPos(win, saved ? saved[0] : defX, saved ? saved[1] : defY)
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
@@ -201,7 +225,7 @@ function createMain() {
     if (!win || win.isDestroyed() || isDragging) return
     const [x, y] = win.getPosition()
     const [cx, cy] = clampToDisplays(x, y)
-    if (cx !== x || cy !== y) win.setPosition(cx, cy)
+    if (cx !== x || cy !== y) safeSetWindowPos(win, cx, cy)
     const now = Date.now()
     if (now - (globalThis.__lastSaveAt || 0) > 400) {
       globalThis.__lastSaveAt = now
@@ -214,23 +238,37 @@ function createMain() {
   // 拖动处理
   ipcMain.on('drag-start', async (_e, at) => {
     if (!win || win.isDestroyed() || !win.isVisible()) return
+    const curMouse = screen.getCursorScreenPoint()
     try {
       const b = win.getBounds()
-      const kind = await win.webContents.executeJavaScript(
-        hitJS(Math.round(at.x - b.x), Math.round(at.y - b.y))
-      )
+      const hitX = Math.round((at && Number.isFinite(at.x) ? at.x : curMouse.x) - b.x)
+      const hitY = Math.round((at && Number.isFinite(at.y) ? at.y : curMouse.y) - b.y)
+      const kind = await win.webContents.executeJavaScript(hitJS(hitX, hitY))
       if (kind === 'panel') return
     } catch (e) {}
 
     isDragging = true
     setIgnore(false)
 
-    dragFrom = { mouse: at, win: win.getPosition() }
+    const wPos = win.getPosition()
+    dragFrom = {
+      mouse: {
+        x: at && Number.isFinite(at.x) ? Math.round(at.x) : curMouse.x,
+        y: at && Number.isFinite(at.y) ? Math.round(at.y) : curMouse.y
+      },
+      win: [Math.round(wPos[0]), Math.round(wPos[1])]
+    }
     clearInterval(dragTimer)
     dragTimer = setInterval(() => {
-      if (!isDragging || !dragFrom || !win || win.isDestroyed()) return
+      if (!isDragging || !dragFrom || !win || win.isDestroyed()) {
+        clearInterval(dragTimer)
+        dragTimer = null
+        return
+      }
       const p = screen.getCursorScreenPoint()
-      win.setPosition(dragFrom.win[0] + (p.x - dragFrom.mouse.x), dragFrom.win[1] + (p.y - dragFrom.mouse.y))
+      const nx = Math.round(dragFrom.win[0] + (p.x - dragFrom.mouse.x))
+      const ny = Math.round(dragFrom.win[1] + (p.y - dragFrom.mouse.y))
+      safeSetWindowPos(win, nx, ny)
     }, 16)
   })
 
@@ -242,7 +280,7 @@ function createMain() {
     if (win && !win.isDestroyed()) {
       const [x, y] = win.getPosition()
       const [cx, cy] = clampToDisplays(x, y)
-      if (cx !== x || cy !== y) win.setPosition(cx, cy)
+      if (cx !== x || cy !== y) safeSetWindowPos(win, cx, cy)
     }
     savePos()
   })
@@ -312,7 +350,9 @@ async function load() {
 function readPos() {
   try {
     const j = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'pos.json'), 'utf8'))
-    if (Array.isArray(j) && j.length === 2 && Number.isFinite(j[0])) return j
+    if (Array.isArray(j) && j.length === 2 && Number.isFinite(j[0]) && Number.isFinite(j[1])) {
+      return [Math.round(j[0]), Math.round(j[1])]
+    }
   } catch (e) {}
   return null
 }
@@ -322,11 +362,11 @@ function clampToDisplays(x, y) {
     const areas = screen.getAllDisplays().map((d) => d.workArea)
     const w = 200, h = 120
     const inside = areas.some((a) => x + w > a.x && x < a.x + a.width && y + h > a.y && y < a.y + a.height)
-    if (inside) return [x, y]
+    if (inside) return [Math.round(x), Math.round(y)]
     const p = screen.getPrimaryDisplay().workArea
-    return [p.x + p.width - WIN_W, p.y + p.height - 300]
+    return [Math.round(p.x + p.width - WIN_W), Math.round(p.y + p.height - 300)]
   } catch (e) {
-    return [x, y]
+    return [Math.round(x), Math.round(y)]
   }
 }
 
@@ -409,7 +449,7 @@ function createBall() {
   })
   ipcMain.on('ball-move', (_e, dx, dy) => {
     if (!ballWin || !ballDrag) return
-    ballWin.setPosition(Math.round(ballDrag[0] + dx), Math.round(ballDrag[1] + dy))
+    safeSetWindowPos(ballWin, ballDrag[0] + dx, ballDrag[1] + dy)
   })
   ipcMain.on('ball-drop', (_e, moved) => {
     if (!ballWin) return
@@ -422,9 +462,9 @@ function snapBall() {
   if (!ballWin) return
   const wa = screen.getPrimaryDisplay().workArea
   const [x, y] = ballWin.getPosition()
-  const nearest = x + BALL / 2 < wa.x + wa.width / 2 ? wa.x + 4 : wa.x + wa.width - BALL - 4
-  const ny = Math.min(Math.max(y, wa.y + 4), wa.y + wa.height - BALL - 4)
-  ballWin.setPosition(nearest, ny)
+  const nearest = Math.round(x + BALL / 2 < wa.x + wa.width / 2 ? wa.x + 4 : wa.x + wa.width - BALL - 4)
+  const ny = Math.round(Math.min(Math.max(y, wa.y + 4), wa.y + wa.height - BALL - 4))
+  safeSetWindowPos(ballWin, nearest, ny)
 }
 
 function collapse() {
@@ -435,7 +475,7 @@ function collapse() {
   const wa = screen.getPrimaryDisplay().workArea
   const onLeft = wx + WIN_W / 2 < wa.x + wa.width / 2
   if (!ballWin) createBall()
-  ballWin.setPosition(onLeft ? wa.x + 4 : wa.x + wa.width - BALL - 4, Math.round(wy + WIN_H / 2 - BALL / 2))
+  safeSetWindowPos(ballWin, onLeft ? wa.x + 4 : wa.x + wa.width - BALL - 4, Math.round(wy + WIN_H / 2 - BALL / 2))
   ballWin.showInactive()
   ballWin.setAlwaysOnTop(true, 'screen-saver')
   win.hide()
@@ -495,7 +535,7 @@ function createTray() {
 function resetPos() {
   if (!win) return
   const wa = screen.getPrimaryDisplay().workArea
-  win.setPosition(wa.x + wa.width - WIN_W - 16, wa.y + wa.height - WIN_H - 16)
+  safeSetWindowPos(win, wa.x + wa.width - WIN_W - 16, wa.y + wa.height - WIN_H - 16)
   savePos()
 }
 
