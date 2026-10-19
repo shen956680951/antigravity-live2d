@@ -20,9 +20,9 @@ var deskBase: String = "http://127.0.0.1:5199"
 var petURL: String { deskBase + "/dsh-pet/standalone" }
 // 窗口必须比「她 + 四周面板」大：说话框 370 宽、设置面板 393×471，
 // 窗口太小时面板会被窗口本身裁掉。
-// 460×700 足够。
-let WIN_W: CGFloat = 460
-let WIN_H: CGFloat = 700
+// 460×700 原来容易裁切扩大的面板，加大到 560×900 完整容纳面板与对话历史
+let WIN_W: CGFloat = 560
+let WIN_H: CGFloat = 900
 let K_X = "pet.win.x", K_Y = "pet.win.y", K_TOP = "pet.win.top", K_LOW = "perf.low"
 
 /// 插件资源目录
@@ -569,6 +569,69 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         return code
     }
 
+    var serverProcess: Process?
+
+    func findNodeExecutable() -> String? {
+        let candidates = [
+            "/opt/homebrew/bin/node",
+            "/usr/local/bin/node",
+            "/usr/bin/node"
+        ]
+        for path in candidates {
+            if FileManager.default.isExecutableFile(atPath: path) { return path }
+        }
+        let nvmDir = NSHomeDirectory() + "/.nvm/versions/node"
+        if let vers = try? FileManager.default.contentsOfDirectory(atPath: nvmDir) {
+            for v in vers.sorted().reversed() {
+                let p = nvmDir + "/" + v + "/bin/node"
+                if FileManager.default.isExecutableFile(atPath: p) { return p }
+            }
+        }
+        return nil
+    }
+
+    func findServerScript() -> String? {
+        let bundleResources = Bundle.main.resourcePath ?? ""
+        let cands = [
+            bundleResources + "/lib/server.js",
+            Bundle.main.bundlePath + "/Contents/Resources/lib/server.js",
+            Bundle.main.bundlePath + "/../../../../lib/server.js",
+            Bundle.main.bundlePath + "/../../../lib/server.js",
+            NSHomeDirectory() + "/Desktop/gemini-whale-girl-live2d/lib/server.js"
+        ]
+        for p in cands {
+            let std = (p as NSString).standardizingPath
+            if FileManager.default.fileExists(atPath: std) { return std }
+        }
+        return nil
+    }
+
+    func tryLaunchNodeServer() -> Bool {
+        guard serverProcess == nil else { return false }
+        guard let nodePath = findNodeExecutable(), let scriptPath = findServerScript() else { return false }
+        log("自动启动 Node 服务端: \(nodePath) \(scriptPath)")
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: nodePath)
+        p.arguments = [scriptPath]
+        p.currentDirectoryURL = URL(fileURLWithPath: (scriptPath as NSString).deletingLastPathComponent).deletingLastPathComponent()
+        var env = ProcessInfo.processInfo.environment
+        env["PORT"] = "5199"
+        p.environment = env
+        do {
+            try p.run()
+            serverProcess = p
+            log("Node 服务端已在后台启动 (PID: \(p.processIdentifier))")
+            return true
+        } catch {
+            log("启动 Node 服务端失败: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    func applicationWillTerminate(_ note: Notification) {
+        serverProcess?.terminate()
+    }
+
     func load() {
         let token = deskToken() ?? "antigravity-token"
         DispatchQueue.global().async { [weak self] in
@@ -583,12 +646,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 }
                 if code == 401, fallback == nil { fallback = base }
             }
+
+            // 若第一次未探活，尝试自动拉起本地 Node 服务并重试探活
+            if self.tryLaunchNodeServer() {
+                Thread.sleep(forTimeInterval: 1.5)
+                for base in self.candidateBases() {
+                    let code = self.probeHost(base, token: token)
+                    if code == 200 {
+                        self.log("拉起服务端后探活成功: \(base)")
+                        DispatchQueue.main.async { self.start(base: base, token: token) }
+                        return
+                    }
+                }
+            }
+
             DispatchQueue.main.async {
                 if let fb = fallback {
                     self.log("找到宿主服务: \(fb)")
                     self.start(base: fb, token: token)
                 } else {
-                    self.showHint("正在连接 Antigravity 桌宠服务 (http://127.0.0.1:5199)... 请先启动 npm run dev 或 npm start")
+                    self.showHint("正在连接 Antigravity 桌宠服务 (http://127.0.0.1:5199)...")
                     self.retry(after: 3)
                 }
             }

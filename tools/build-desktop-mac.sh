@@ -56,6 +56,12 @@ if [ -f "$ICON" ] && command -v swiftc >/dev/null; then
   rm -rf "$TMPICON"
 fi
 
+echo "③.5 同步内置核心服务端与资源"
+mkdir -p "$TMP_APP/Contents/Resources"
+cp -R "$ROOT/lib" "$TMP_APP/Contents/Resources/"
+cp -R "$ROOT/assets" "$TMP_APP/Contents/Resources/"
+[ -f "$ROOT/config.json" ] && cp "$ROOT/config.json" "$TMP_APP/Contents/Resources/"
+
 echo "④ 临时签名（本机自己编译的，不需要开发者证书）"
 codesign --force --sign - --identifier "$BUNDLE_ID" "$TMP_APP" 2>/dev/null \
   && echo "   ✓ 已签名" || echo "   · 跳过签名"

@@ -11,6 +11,9 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
+// 优化 Windows 透明窗口渲染稳定性
+app.commandLine.appendSwitch('disable-gpu-sandbox')
+
 const CANDIDATE_BASES = [
   'http://127.0.0.1:5199',
   'http://127.0.0.1:3080',
@@ -42,16 +45,26 @@ let lastHit = 'none'
 // ——————————————————————————————————————————————————————————————
 // 启动 / 检测内置服务端
 // ——————————————————————————————————————————————————————————————
+async function waitForServer(port = 5199, timeoutMs = 8000) {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/standalone`, { signal: AbortSignal.timeout(400) })
+      if (res.ok) return true
+    } catch (e) {}
+    await new Promise((r) => setTimeout(r, 150))
+  }
+  return false
+}
+
 async function startEmbeddedServer() {
   try {
-    const res = await fetch('http://127.0.0.1:5199/api/status', { signal: AbortSignal.timeout(1000) })
+    const res = await fetch('http://127.0.0.1:5199/api/status', { signal: AbortSignal.timeout(600) })
     if (res.ok) {
       console.log('[Desktop] 检测到已在运行的 Antigravity 服务 (5199)')
       return true
     }
-  } catch (e) {
-    // 尚未运行，正常启动内置服务
-  }
+  } catch (e) {}
 
   const serverPath = fs.existsSync(path.join(__dirname, 'lib', 'server.js'))
     ? path.join(__dirname, 'lib', 'server.js')
@@ -60,6 +73,17 @@ async function startEmbeddedServer() {
   if (!fs.existsSync(serverPath)) {
     console.warn('[Desktop] 未找到内置 server.js 路径:', serverPath)
     return false
+  }
+
+  // 确保 lib/package.json 存在以支持 ES Module 语法
+  const libDir = path.dirname(serverPath)
+  const libPkgPath = path.join(libDir, 'package.json')
+  if (!fs.existsSync(libPkgPath)) {
+    try {
+      fs.writeFileSync(libPkgPath, JSON.stringify({ type: 'module' }, null, 2))
+    } catch (e) {
+      console.warn('[Desktop] 写入 lib/package.json 提示:', e.message)
+    }
   }
 
   console.log('[Desktop] 启动内置 Antigravity 桌宠服务:', serverPath)
@@ -88,7 +112,12 @@ const hitJS = (x, y) => `(function(){try{
 
 function setIgnore(on) {
   if (!win || win.isDestroyed()) return
-  win.setIgnoreMouseEvents(on, { forward: true })
+  if (on) {
+    win.setIgnoreMouseEvents(true, { forward: true })
+  } else {
+    // 关键：取消穿透时严禁带 { forward: true }，否则 Windows 上无法响应点击
+    win.setIgnoreMouseEvents(false)
+  }
 }
 
 async function poll() {
@@ -120,6 +149,7 @@ function createMain() {
     height: WIN_H,
     frame: false,
     transparent: true,
+    backgroundColor: '#00000000',
     resizable: false,
     hasShadow: false,
     skipTaskbar: true,
@@ -144,17 +174,27 @@ function createMain() {
     return { action: 'deny' }
   })
 
-  win.webContents.on('did-finish-load', () => {
-    failCount = 0
-    win.webContents.executeJavaScript('window.DSHPet && DSHPet.setLowPower && DSHPet.setLowPower(' + lowPower + ')').catch(() => {})
-    setTimeout(() => win.webContents.executeJavaScript('window.DSHPet && DSHPet.setHidden && DSHPet.setHidden(false)').catch(() => {}), 1200)
-    setTimeout(() => win.webContents.executeJavaScript('window.DSHPet && DSHPet.setHidden && DSHPet.setHidden(false)').catch(() => {}), 3000)
+  // 转发渲染进程 console 日志，方便调试
+  win.webContents.on('console-message', (_e, _level, msg) => {
+    console.log('[WebConsole]', msg)
   })
 
-  win.webContents.on('did-fail-load', () => {
+  win.webContents.on('did-finish-load', () => {
+    failCount = 0
+    if (!win.isVisible()) {
+      win.showInactive()
+      win.setAlwaysOnTop(true, 'screen-saver')
+    }
+    win.webContents.executeJavaScript('window.DSHPet && DSHPet.setLowPower && DSHPet.setLowPower(' + lowPower + ')').catch(() => {})
+    setTimeout(() => win.webContents.executeJavaScript('window.DSHPet && DSHPet.setHidden && DSHPet.setHidden(false)').catch(() => {}), 1000)
+    setTimeout(() => win.webContents.executeJavaScript('window.DSHPet && DSHPet.setHidden && DSHPet.setHidden(false)').catch(() => {}), 2500)
+  })
+
+  win.webContents.on('did-fail-load', (_e, errorCode, errorDescription) => {
+    console.warn('[Desktop] 页面加载失败:', errorCode, errorDescription)
     failCount++
     if (failCount >= 3) showHint()
-    setTimeout(load, 4000)
+    setTimeout(load, 3000)
   })
 
   win.on('moved', () => {
@@ -249,7 +289,14 @@ function createMain() {
 async function load() {
   if (!win || win.isDestroyed()) return
   await startEmbeddedServer()
+  const ok = await waitForServer(5199, 8000)
+  if (!ok) {
+    console.warn('[Desktop] 服务未在预期时间内就绪，显示等待提示')
+    showHint()
+    return
+  }
   petBase = 'http://127.0.0.1:5199'
+  console.log('[Desktop] 正在加载桌宠主页:', petURL())
   win.loadURL(petURL())
 }
 
@@ -329,6 +376,7 @@ function createBall() {
     height: BALL,
     frame: false,
     transparent: true,
+    backgroundColor: '#00000000',
     resizable: false,
     hasShadow: false,
     skipTaskbar: true,

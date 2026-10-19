@@ -63,6 +63,9 @@
     "mac": {
       "icon": "build/icon.png",
       "category": "public.app-category.entertainment",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
       "target": [
         {
           "target": "dmg",
