@@ -35,6 +35,7 @@ let cursorFeed = null
 let lastCursor = null
 let dragTimer = null
 let dragFrom = null
+let isDragging = false
 let ballDrag = null
 let collapsed = false
 let lowPower = false
@@ -121,7 +122,7 @@ function setIgnore(on) {
 }
 
 async function poll() {
-  if (!win || win.isDestroyed() || !win.isVisible()) return
+  if (!win || win.isDestroyed() || !win.isVisible() || isDragging || dragTimer) return
   const p = screen.getCursorScreenPoint()
   const b = win.getBounds()
   if (p.x < b.x || p.x > b.x + b.width || p.y < b.y || p.y > b.y + b.height) {
@@ -129,7 +130,6 @@ async function poll() {
     setIgnore(true)
     return
   }
-  if (dragTimer) return
   try {
     const kind = await win.webContents.executeJavaScript(hitJS(Math.round(p.x - b.x), Math.round(p.y - b.y)))
     lastHit = kind
@@ -198,7 +198,7 @@ function createMain() {
   })
 
   win.on('moved', () => {
-    if (!win || win.isDestroyed()) return
+    if (!win || win.isDestroyed() || isDragging) return
     const [x, y] = win.getPosition()
     const [cx, cy] = clampToDisplays(x, y)
     if (cx !== x || cy !== y) win.setPosition(cx, cy)
@@ -221,20 +221,29 @@ function createMain() {
       )
       if (kind === 'panel') return
     } catch (e) {}
+
+    isDragging = true
+    setIgnore(false)
+
     dragFrom = { mouse: at, win: win.getPosition() }
     clearInterval(dragTimer)
     dragTimer = setInterval(() => {
-      if (!dragFrom || !win) return
+      if (!isDragging || !dragFrom || !win || win.isDestroyed()) return
       const p = screen.getCursorScreenPoint()
       win.setPosition(dragFrom.win[0] + (p.x - dragFrom.mouse.x), dragFrom.win[1] + (p.y - dragFrom.mouse.y))
     }, 16)
-    win.webContents.executeJavaScript("document.dispatchEvent(new PointerEvent('pointercancel',{bubbles:true}))").catch(() => {})
   })
 
   ipcMain.on('drag-end', () => {
     clearInterval(dragTimer)
     dragTimer = null
     dragFrom = null
+    isDragging = false
+    if (win && !win.isDestroyed()) {
+      const [x, y] = win.getPosition()
+      const [cx, cy] = clampToDisplays(x, y)
+      if (cx !== x || cy !== y) win.setPosition(cx, cy)
+    }
     savePos()
   })
 
@@ -262,7 +271,7 @@ function createMain() {
   // 全屏视线追踪 (60Hz)
   cursorFeed = setInterval(() => {
     try {
-      if (!win || win.isDestroyed() || !win.isVisible() || dragTimer) return
+      if (!win || win.isDestroyed() || !win.isVisible() || isDragging || dragTimer) return
       const p = screen.getCursorScreenPoint()
       if (lastCursor && Math.abs(lastCursor.x - p.x) < 1 && Math.abs(lastCursor.y - p.y) < 1) return
       lastCursor = p

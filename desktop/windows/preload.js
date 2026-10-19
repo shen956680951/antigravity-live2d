@@ -1,9 +1,4 @@
-// 预加载脚本：给网页搭一座桥，让 Windows 版和 macOS 版**用同一套前端协议**。
-//
-// 关键点：前端 pet.js 里判断「我在不在桌面壳里」靠两个东西 ——
-//   window.__DSHPET_SHELL__ 和 window.webkit.messageHandlers.dshpetshell.postMessage()
-// 这俩是 macOS(WKWebView) 的原生接口。Electron 里没有，所以这里**照着原样补一个**，
-// 于是前端一行都不用改，桌面壳里该有的行为（收起成小球、设置页多两项、打开 DSH）自动就有。
+// 预加载脚本：给网页搭一座桥，让 Windows 版和 macOS 版用同一套前端协议。
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('__DSHPET_SHELL__', true)
@@ -22,9 +17,77 @@ contextBridge.exposeInMainWorld('dshpetBridge', {
   ballDrop: (moved) => ipcRenderer.send('ball-drop', moved),
 })
 
-// 拖动：页面里按下她 → 告诉主进程搬窗口（主进程只在鼠标确实压在她身上时才搬，
-// 压在面板上时放行给网页，所以设置里的滑块照样能拖）
-window.addEventListener('mousedown', (e) => {
-  if (e.button === 0) ipcRenderer.send('drag-start', { x: e.screenX, y: e.screenY })
-}, true)
-window.addEventListener('mouseup', () => ipcRenderer.send('drag-end'), true)
+// 拖动处理：
+// 1. 点在输入框、按钮或面板控件内不触发窗口拖动；
+// 2. 超过 4px 阈值才视为拖动窗口（普通点击仍可正常摸头/交互）；
+// 3. 锁定 pointer capture，防止高速拖动时鼠标移出窗口导致丢帧和抽搐。
+let dragSession = null
+
+window.addEventListener(
+  'pointerdown',
+  (e) => {
+    if (e.button !== 0) return
+    const target = e.target
+    if (
+      target &&
+      (target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable)
+    ) {
+      return
+    }
+    const isPanel = !!(
+      target &&
+      target.closest &&
+      target.closest(
+        '.dshp-panel, .dshp-menu, .dshp-hud, .dshp-composer, .dshp-dock, .dshp-tab, input, button, textarea'
+      )
+    )
+    if (isPanel) return
+
+    dragSession = {
+      startX: e.screenX,
+      startY: e.screenY,
+      pointerId: e.pointerId,
+      target: target,
+      started: false,
+    }
+  },
+  true
+)
+
+window.addEventListener(
+  'pointermove',
+  (e) => {
+    if (!dragSession) return
+    const dx = e.screenX - dragSession.startX
+    const dy = e.screenY - dragSession.startY
+    if (!dragSession.started && Math.abs(dx) + Math.abs(dy) > 4) {
+      dragSession.started = true
+      try {
+        if (dragSession.target && dragSession.target.setPointerCapture) {
+          dragSession.target.setPointerCapture(dragSession.pointerId)
+        }
+      } catch (_) {}
+      ipcRenderer.send('drag-start', { x: dragSession.startX, y: dragSession.startY })
+    }
+  },
+  true
+)
+
+const endDrag = () => {
+  if (dragSession) {
+    if (dragSession.started) {
+      ipcRenderer.send('drag-end')
+    }
+    try {
+      if (dragSession.target && dragSession.target.releasePointerCapture) {
+        dragSession.target.releasePointerCapture(dragSession.pointerId)
+      }
+    } catch (_) {}
+    dragSession = null
+  }
+}
+
+window.addEventListener('pointerup', endDrag, true)
+window.addEventListener('pointercancel', endDrag, true)

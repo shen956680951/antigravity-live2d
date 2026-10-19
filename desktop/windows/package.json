@@ -1,7 +1,7 @@
 {
   "name": "antigravity-whale-girl-pet",
   "productName": "Antigravity 鲸鱼娘桌宠",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Antigravity 鲸鱼娘桌宠：基于 Live2D Cubism 的桌面伴侣助手",
   "main": "main.js",
   "author": "Andersen216",
@@ -38,27 +38,13 @@
       "signAndEditExecutable": false,
       "target": [
         {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
           "target": "zip",
           "arch": [
             "x64"
           ]
         }
-      ]
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "Antigravity 鲸鱼娘桌宠",
-      "artifactName": "Antigravity-WhaleGirl-Pet-Windows-Setup-v${version}.${ext}"
+      ],
+      "artifactName": "Antigravity-WhaleGirl-Pet-Windows-v${version}.${ext}"
     },
     "mac": {
       "icon": "build/icon.png",
@@ -69,13 +55,6 @@
       "target": [
         {
           "target": "dmg",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
-        },
-        {
-          "target": "zip",
           "arch": [
             "arm64",
             "x64"

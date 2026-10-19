@@ -1963,6 +1963,15 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
     const h = root.getBoundingClientRect().height || 0
     const dock = dockClearance()
 
+    if (shell.on) {
+      root.style.left = 'auto'
+      root.style.right = '24px'
+      root.style.bottom = '20px'
+      root.style.top = 'auto'
+      root.dataset.edge = 'right'
+      return
+    }
+
     if (layout.edge === 'left' || layout.edge === 'right') {
       applyEdge(layout.edge, layout.edgeY != null ? layout.edgeY : vh - h - dock - EDGE_GAP)
       return
@@ -2674,18 +2683,23 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
           const dy = e.clientY - start.my
           if (!dragMoved && Math.abs(dx) + Math.abs(dy) > 4) dragMoved = true
           if (dragMoved) {
-            const nh = root.getBoundingClientRect().height
-            const nx = clamp(start.left + dx, -40, window.innerWidth - 60)
-            // 竖直方向随便放，但别放到连底下三个按钮都被屏幕切掉
-            const ny = clampY(start.top + dy, nh, window.innerHeight)
-            // 身体随拖动方向摇摆：横向速度直接喂给身体的倾斜
-            drag.vx = nx - (parseFloat(root.style.left) || nx)
-            drag.vy = ny - (parseFloat(root.style.top) || ny)
-            root.style.left = nx + 'px'
-            root.style.top = ny + 'px'
-            root.style.right = 'auto'
-            root.style.bottom = 'auto'
-
+            if (!shell.on) {
+              const nh = root.getBoundingClientRect().height
+              const nx = clamp(start.left + dx, -40, window.innerWidth - 60)
+              // 竖直方向随便放，但别放到连底下三个按钮都被屏幕切掉
+              const ny = clampY(start.top + dy, nh, window.innerHeight)
+              // 身体随拖动方向摇摆：横向速度直接喂给身体的倾斜
+              drag.vx = nx - (parseFloat(root.style.left) || nx)
+              drag.vy = ny - (parseFloat(root.style.top) || ny)
+              root.style.left = nx + 'px'
+              root.style.top = ny + 'px'
+              root.style.right = 'auto'
+              root.style.bottom = 'auto'
+            } else {
+              // 壳子模式下窗口整体移动，身体仅做微小倾斜摆动，DOM 绝对不位移
+              drag.vx = dx * 0.1
+              drag.vy = dy * 0.1
+            }
           }
         }
         // 只记录坐标，真正的跟随在 gazeTick 里限速执行——
@@ -2708,7 +2722,7 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
         e.preventDefault()
         dragging = true
         dragMoved = false
-        delete root.dataset.edge // 一拖就离开墙，别再显示「贴着左边」
+        if (!shell.on) delete root.dataset.edge // 一拖就离开墙，别再显示「贴着左边」
         const r = root.getBoundingClientRect()
         start = { mx: e.clientX, my: e.clientY, left: r.left, top: r.top }
       },
@@ -2721,8 +2735,10 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
         if (!dragging) return
         dragging = false
         if (dragMoved) {
-          // 松手：先看要不要贴边吸附，没吸附上再走自由惯性
-          if (!snapOnRelease()) dragInertia(drag.vx, drag.vy)
+          if (!shell.on) {
+            // 松手：先看要不要贴边吸附，没吸附上再走自由惯性
+            if (!snapOnRelease()) dragInertia(drag.vx, drag.vy)
+          }
           drag.vx = 0
           drag.vy = 0
         } else {
