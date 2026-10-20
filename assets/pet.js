@@ -1772,7 +1772,9 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
     // 缩放按**实体高度**算（不是视窗高度）：加了余量之后她的大小和以前一模一样，
     // 只是周围多出一圈空间。
     let scale = wanted / (ch * frac * baseH)
-    const maxW = Math.max(240, window.innerWidth * (CFG.maxWidthRatio || 0.5))
+    const maxW = shell.on
+      ? Math.max(360, window.innerWidth - 30)
+      : Math.max(240, window.innerWidth * (CFG.maxWidthRatio || 0.5))
     if (viewWModel * scale > maxW) scale = maxW / viewWModel
 
     const w = Math.max(40, Math.round(viewWModel * scale))
@@ -1964,14 +1966,21 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
     const dock = dockClearance()
 
     if (shell.on) {
-      root.style.left = 'auto'
-      root.style.right = '24px'
-      root.style.bottom = '20px'
+      // 桌面客户端模式（固定视口 560 × 900）：
+      // 1. 垂直安全间距：工具栏（.dshp-dock）位于 root 下方约 35~40px，必须为底部留足间距，
+      //    确保「💬 说话」「⋯」「–」「🗑」四个按钮完整显示且有舒适留白，绝不切断！
+      const bottomClearance = Math.max(56, Math.round(dock + 22))
+      root.style.bottom = bottomClearance + 'px'
       root.style.top = 'auto'
-      root.dataset.edge = 'right'
+      // 2. 水平居中停放：两侧各留出充足余量（约 100px），伸手、喷水、番茄酱特效及左右面板皆不会碰壁截断
+      root.style.left = '50%'
+      root.style.right = 'auto'
+      root.style.transform = 'translateX(-50%)'
+      root.dataset.edge = 'center'
       return
     }
 
+    root.style.transform = ''
     if (layout.edge === 'left' || layout.edge === 'right') {
       applyEdge(layout.edge, layout.edgeY != null ? layout.edgeY : vh - h - dock - EDGE_GAP)
       return
@@ -2824,8 +2833,9 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
     window.addEventListener('resize', () => {
       fitModel()
       const layout = readLayout()
-      // 贴着左/右墙的：重新贴住那一侧（竖直位置不变，只夹进可见范围）
-      if (layout.edge === 'left' || layout.edge === 'right') {
+      if (shell.on) {
+        applyPosition(layout)
+      } else if (layout.edge === 'left' || layout.edge === 'right') {
         applyPosition(layout)
       } else if (root.style.left && root.style.left !== 'auto') {
         root.style.left = clamp(parseFloat(root.style.left) || 0, -40, window.innerWidth - 60) + 'px'
@@ -3626,7 +3636,7 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
     setHidden(false)
     const keep = { height: readLayout().height || CFG.height }
     saveLayout({ props: [], fit: 'full', x: null, y: null, hidden: false, ...keep })
-    for (const k of ['left', 'top', 'right', 'bottom']) ui.root.style[k] = ''
+    for (const k of ['left', 'top', 'right', 'bottom', 'transform']) ui.root.style[k] = ''
     fitModel()
     applyPosition(readLayout())
     return true
@@ -4786,7 +4796,7 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
     const row2 = $('div', 'dshp-row')
     const reset = $('button', 'dshp-btn', '回到角落')
     reset.addEventListener('click', () => {
-      for (const k of ['left', 'top', 'right', 'bottom']) ui.root.style[k] = ''
+      for (const k of ['left', 'top', 'right', 'bottom', 'transform']) ui.root.style[k] = ''
       saveLayout({ x: null, y: null })
       applyPosition(readLayout())
     })
