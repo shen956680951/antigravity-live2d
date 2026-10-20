@@ -1,6 +1,6 @@
 {
   "name": "antigravity-whale-girl-live2d",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Antigravity 鲸鱼娘：基于 Live2D Cubism 的 Antigravity 可视化桌面伴侣助手。模型常驻桌面，联动 Antigravity 状态换表情与动作，支持流式对话与打字机唇形同步。",
   "keywords": [
     "antigravity",

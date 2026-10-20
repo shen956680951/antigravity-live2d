@@ -122,23 +122,28 @@ async function startEmbeddedServer() {
 // ——————————————————————————————————————————————————————————————
 const hitJS = (x, y) => `(function(){try{
   var el=document.elementFromPoint(${x},${y});
-  var ui=!!(el&&el.closest&&el.closest('.dshp-panel,.dshp-menu,.dshp-hud,.dshp-bubble,.dshp-composer,.dshp-dock,.dshp-tab,.dshp-wrap'));
+  var ui=!!(el&&el.closest&&el.closest('.dshp-panel,.dshp-menu,.dshp-hud,.dshp-bubble,.dshp-composer,.dshp-dock,.dshp-tab,.dshp-wrap,.dshp-btn,button,input,textarea,a,select'));
   if(ui) return 'panel';
+  if(window.DSHPet&&DSHPet.overDock&&DSHPet.overDock(${x},${y})) return 'panel';
   if(window.DSHPet&&DSHPet.hitTest&&DSHPet.hitTest(${x},${y})) return 'model';
   return 'none';
 }catch(e){return 'none'}})()`
 
+let currentIgnore = null
 function setIgnore(on) {
   if (!win || win.isDestroyed()) return
+  const target = !!on
+  if (currentIgnore === target) return
+  currentIgnore = target
   try {
-    if (on) {
+    if (target) {
       win.setIgnoreMouseEvents(true, { forward: true })
     } else {
       win.setIgnoreMouseEvents(false)
     }
   } catch (e) {
     try {
-      win.setIgnoreMouseEvents(!!on)
+      win.setIgnoreMouseEvents(target)
     } catch (_) {}
   }
 }
@@ -306,24 +311,24 @@ function createMain() {
 
   load()
 
-  // 全屏视线追踪 (60Hz)
+  // 全屏视线追踪 (30Hz)
   cursorFeed = setInterval(() => {
     try {
       if (!win || win.isDestroyed() || !win.isVisible() || isDragging || dragTimer) return
       const p = screen.getCursorScreenPoint()
-      if (lastCursor && Math.abs(lastCursor.x - p.x) < 1 && Math.abs(lastCursor.y - p.y) < 1) return
+      if (lastCursor && Math.abs(lastCursor.x - p.x) < 2 && Math.abs(lastCursor.y - p.y) < 2) return
       lastCursor = p
       const b = win.getBounds()
-      const disp = screen.getDisplayNearestPoint(p).bounds
-      const nx = (p.x - disp.x) / Math.max(1, disp.width)
-      const ny = (p.y - disp.y) / Math.max(1, disp.height)
-      win.webContents.sendInputEvent({
-        type: 'mouseMove',
-        x: Math.round(nx * b.width),
-        y: Math.round(ny * b.height)
-      })
+      // 鼠标在窗口内部时，原生操作系统事件正在正常派发，绝对不注入虚假事件破坏 hover 状态
+      if (p.x >= b.x && p.x <= b.x + b.width && p.y >= b.y && p.y <= b.y + b.height) return
+
+      const gx = Math.round(p.x - b.x)
+      const gy = Math.round(p.y - b.y)
+      win.webContents.executeJavaScript(
+        `window.DSHPet && DSHPet.setGaze && DSHPet.setGaze(${gx}, ${gy})`
+      ).catch(() => {})
     } catch (e) {}
-  }, 16)
+  }, 32)
 
   pollTimer = setInterval(poll, 90)
 

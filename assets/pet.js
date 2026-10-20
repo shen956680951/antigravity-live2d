@@ -2674,7 +2674,7 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
           // 主人反馈：「我鼠标往下走要去点那三个键，一离开她身上它们就消失了，点不着」。
           // 原因：原来只认 hitTest（她模型身上），而工具栏在她**下方**、不在模型掩码里。
           // 现在把「鼠标在工具栏矩形内」也算作悬停，并且离开后多留 900ms。
-          const on = hitTest(e.clientX, e.clientY) || overDock(e.clientX, e.clientY)
+          const on = hitTest(e.clientX, e.clientY) || overDock(e.clientX, e.clientY) || !!(e.target && e.target.closest && e.target.closest('.dshp-dock, .dshp-panel, .dshp-menu, .dshp-hud, .dshp-bubble, .dshp-composer'))
           if (on) {
             root.classList.add('dshp-hover')
             if (leaveTimer) {
@@ -5307,6 +5307,13 @@ body.dshp-pet-hidden .dshp-tab{display:flex}
     clearProps,
     playMotion,
     hitTest,
+    overDock,
+    setGaze: (clientX, clientY) => {
+      gaze.pointer.x = clientX
+      gaze.pointer.y = clientY
+      gaze.pointer.seen = true
+      gaze.pointer.at = performance.now()
+    },
     /** 隐藏 / 恢复。壳子（桌面版）收起成小球后，靠它把页面里的状态一起改回来 */
     setHidden,
     /** 性能档：壳子/设置页用它切「低性能模式」 */
